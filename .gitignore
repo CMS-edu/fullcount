@@ -1,0 +1,6 @@
+temp/
+output/
+node_modules/
+.vercel/
+.DS_Store
+progress.md
