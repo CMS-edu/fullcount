@@ -31,12 +31,12 @@ const FIELD = {
 };
 
 const pitchCatalog = {
-  "직구": { speedModifier: 8, movement: { x: 4, y: -2 }, controlDifficulty: 8, color: "#f4f7ff" },
-  "커브": { speedModifier: -16, movement: { x: -18, y: 42 }, controlDifficulty: 18, color: "#ffd36b" },
-  "체인지업": { speedModifier: -20, movement: { x: 10, y: 18 }, controlDifficulty: 12, color: "#65d68a" },
-  "슬라이더": { speedModifier: -8, movement: { x: -34, y: 8 }, controlDifficulty: 16, color: "#79a8ff" },
-  "투심": { speedModifier: 2, movement: { x: 18, y: 18 }, controlDifficulty: 13, color: "#ff9b70" },
-  "스위퍼": { speedModifier: -12, movement: { x: -50, y: 5 }, controlDifficulty: 21, color: "#c79bff" },
+  "직구": { speedModifier: 16, movement: { x: 4, y: -2 }, controlDifficulty: 8, color: "#f4f7ff" },
+  "커브": { speedModifier: -24, movement: { x: -18, y: 42 }, controlDifficulty: 18, color: "#ffd36b" },
+  "체인지업": { speedModifier: -22, movement: { x: 10, y: 18 }, controlDifficulty: 12, color: "#65d68a" },
+  "슬라이더": { speedModifier: -6, movement: { x: -34, y: 8 }, controlDifficulty: 16, color: "#79a8ff" },
+  "투심": { speedModifier: 10, movement: { x: 18, y: 18 }, controlDifficulty: 13, color: "#ff9b70" },
+  "스위퍼": { speedModifier: -10, movement: { x: -50, y: 5 }, controlDifficulty: 21, color: "#c79bff" },
 };
 
 const kiaClub = {
@@ -1158,7 +1158,7 @@ function startPitch(pitchType, mode) {
     start: { ...FIELD.mound },
     end,
     t: 0,
-    duration: clamp(1.24 - (speed - 112) / 105, 0.58, 1.18),
+    duration: clamp(1.03 - (speed - 116) / 128 + randomInt(-7, 8) / 100, 0.42, 0.94),
     inZone,
     decisionMade: false,
     pitchType,
@@ -1212,25 +1212,50 @@ function resolveBattingResult() {
     return;
   }
 
-  const perfect = timingDiff <= 8;
-  const basesLoaded = game.bases.first && game.bases.second && game.bases.third;
-  let result = "1루타";
-  if (game.buntMode) {
-    result = batter.bunt + randomInt(-20, 25) > 68 ? "번트안타" : "땅볼아웃";
-  } else if (perfect && powerScore > 135 && Math.random() < 0.72) {
-    result = basesLoaded ? "만루홈런" : "홈런";
-  } else if (powerScore > 128 && Math.random() < 0.42) {
-    result = "홈런";
-  } else if (powerScore > 112 && batter.speed > 72 && Math.random() < 0.35) {
-    result = "3루타";
-  } else if (powerScore > 98 && contactScore > 68) {
-    result = "2루타";
-  } else if (game.bases.first && game.outs < 2 && contactScore < 78 && Math.random() < 0.38) {
-    result = "병살타";
-  } else if (contactScore < 74 || Math.random() < 0.18) {
-    result = powerScore > 92 || Math.random() < 0.45 ? "플라이아웃" : "땅볼아웃";
-  }
+  const result = chooseBattedBallResult({
+    batter,
+    contact,
+    contactQuality,
+    contactScore,
+    powerScore,
+    timingDiff,
+  });
   applyHitResult(result);
+}
+
+function chooseBattedBallResult({ batter, contact, contactQuality, contactScore, powerScore, timingDiff }) {
+  const basesLoaded = game.bases.first && game.bases.second && game.bases.third;
+  const hasForceAtSecond = game.bases.first && game.outs < 2;
+  const roll = Math.random();
+  const sweet = contactQuality > 0.74 && timingDiff < 16 && contactScore > 82;
+  const weak = contactQuality < 0.45 || contactScore < 68 || timingDiff > 34;
+  const jammed = contact?.along < 0.38 || contactQuality < 0.36;
+  const under = contact?.along > 0.86 || (powerScore > 92 && contactQuality < 0.62);
+
+  if (game.buntMode) {
+    if (batter.bunt + randomInt(-20, 25) > 70) return "번트안타";
+    return hasForceAtSecond && roll < 0.38 ? "병살타" : "땅볼아웃";
+  }
+
+  if (hasForceAtSecond && weak && roll < 0.34) return "병살타";
+  if (jammed && roll < 0.58) return "땅볼아웃";
+  if (under && roll < 0.58) return "플라이아웃";
+  if (weak) {
+    if (roll < 0.42) return "땅볼아웃";
+    if (roll < 0.78) return "플라이아웃";
+    return "파울";
+  }
+
+  if (sweet && powerScore > 134 && roll < 0.62) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 116 && batter.speed > 72 && roll < 0.18) return "3루타";
+  if (sweet && powerScore > 102 && roll < 0.46) return "2루타";
+
+  if (hasForceAtSecond && contactScore < 78 && roll < 0.18) return "병살타";
+  if (contactQuality < 0.62 && roll < 0.32) return powerScore > 95 ? "플라이아웃" : "땅볼아웃";
+  if (powerScore > 126 && contactScore > 82 && roll < 0.16) return "홈런";
+  if (powerScore > 104 && contactScore > 76 && roll < 0.30) return "2루타";
+  if (powerScore > 108 && batter.speed > 78 && roll < 0.10) return "3루타";
+  return roll < 0.68 ? "1루타" : powerScore > 92 ? "플라이아웃" : "땅볼아웃";
 }
 
 function isSwingInContactWindow() {
@@ -1507,7 +1532,8 @@ function chooseAISwing() {
 
 function calculatePitchSpeed(pitcherObj, pitchType) {
   const staminaPenalty = Math.max(0, 55 - pitcherObj.stamina) * 0.16;
-  return Math.round(118 + pitcherObj.velocity * 0.34 + pitchCatalog[pitchType].speedModifier - staminaPenalty + randomInt(-3, 3));
+  const raw = 123 + pitcherObj.velocity * 0.38 + pitchCatalog[pitchType].speedModifier - staminaPenalty + randomInt(-7, 7);
+  return Math.round(clamp(raw, 104, 164));
 }
 
 function calculatePitchMovement(pitcherObj, pitchType, batterObj) {
