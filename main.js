@@ -464,6 +464,8 @@ function triggerAIBatSwing() {
 
 function updateBall(deltaTime) {
   const ball = game.ball;
+  ball.prevX = ball.x;
+  ball.prevY = ball.y;
   ball.t = clamp(ball.t + deltaTime / ball.duration, 0, 1);
   const p = getPitchPoint(ball, ball.t);
   ball.x = p.x;
@@ -1158,7 +1160,7 @@ function startPitch(pitchType, mode) {
     start: { ...FIELD.mound },
     end,
     t: 0,
-    duration: clamp(1.03 - (speed - 116) / 128 + randomInt(-7, 8) / 100, 0.42, 0.94),
+    duration: clamp(0.86 - (speed - 118) / 148 + randomInt(-8, 8) / 100, 0.3, 0.76),
     inZone,
     decisionMade: false,
     pitchType,
@@ -1237,12 +1239,14 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
     return hasForceAtSecond && roll < 0.38 ? "병살타" : "땅볼아웃";
   }
 
-  if (hasForceAtSecond && weak && roll < 0.34) return "병살타";
-  if (jammed && roll < 0.58) return "땅볼아웃";
-  if (under && roll < 0.58) return "플라이아웃";
+  if (contactQuality < 0.22) return "파울";
+  if (hasForceAtSecond && jammed && roll < 0.48) return "병살타";
+  if (jammed) return roll < 0.72 ? "땅볼아웃" : "파울";
+  if (under) return roll < 0.72 ? "플라이아웃" : "파울";
+  if (hasForceAtSecond && weak && roll < 0.42) return "병살타";
   if (weak) {
-    if (roll < 0.42) return "땅볼아웃";
-    if (roll < 0.78) return "플라이아웃";
+    if (roll < 0.48) return "땅볼아웃";
+    if (roll < 0.84) return "플라이아웃";
     return "파울";
   }
 
@@ -1250,12 +1254,12 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
   if (sweet && powerScore > 116 && batter.speed > 72 && roll < 0.18) return "3루타";
   if (sweet && powerScore > 102 && roll < 0.46) return "2루타";
 
-  if (hasForceAtSecond && contactScore < 78 && roll < 0.18) return "병살타";
-  if (contactQuality < 0.62 && roll < 0.32) return powerScore > 95 ? "플라이아웃" : "땅볼아웃";
+  if (hasForceAtSecond && contactScore < 80 && roll < 0.24) return "병살타";
+  if (contactQuality < 0.62 && roll < 0.46) return powerScore > 95 ? "플라이아웃" : "땅볼아웃";
   if (powerScore > 126 && contactScore > 82 && roll < 0.16) return "홈런";
-  if (powerScore > 104 && contactScore > 76 && roll < 0.30) return "2루타";
+  if (powerScore > 104 && contactScore > 76 && roll < 0.24) return "2루타";
   if (powerScore > 108 && batter.speed > 78 && roll < 0.10) return "3루타";
-  return roll < 0.68 ? "1루타" : powerScore > 92 ? "플라이아웃" : "땅볼아웃";
+  return roll < 0.52 ? "1루타" : powerScore > 92 ? "플라이아웃" : "땅볼아웃";
 }
 
 function isSwingInContactWindow() {
@@ -1285,7 +1289,7 @@ function getContactReach() {
 function getBatBallContact() {
   if (!game.ball.active || !game.bat.held) return null;
   const segment = getBatWorldSegment();
-  const projected = projectPointToSegment(game.ball, segment.start, segment.end);
+  const projected = getSweptBallBatContact(segment);
   const collisionRadius = game.buntMode ? 18 : 15;
   if (projected.distance > collisionRadius) return null;
   return {
@@ -1294,6 +1298,26 @@ function getBatBallContact() {
     quality: clamp(1 - projected.distance / collisionRadius, 0, 1),
     sweetSpot: clamp(1 - Math.abs(projected.along - 0.72) / 0.5, 0, 1),
   };
+}
+
+function getSweptBallBatContact(segment) {
+  const start = {
+    x: Number.isFinite(game.ball.prevX) ? game.ball.prevX : game.ball.x,
+    y: Number.isFinite(game.ball.prevY) ? game.ball.prevY : game.ball.y,
+  };
+  const end = { x: game.ball.x, y: game.ball.y };
+  let best = projectPointToSegment(end, segment.start, segment.end);
+  const steps = 5;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const point = {
+      x: start.x + (end.x - start.x) * t,
+      y: start.y + (end.y - start.y) * t,
+    };
+    const projected = projectPointToSegment(point, segment.start, segment.end);
+    if (projected.distance < best.distance) best = projected;
+  }
+  return best;
 }
 
 function getBatWorldSegment() {
@@ -1532,8 +1556,8 @@ function chooseAISwing() {
 
 function calculatePitchSpeed(pitcherObj, pitchType) {
   const staminaPenalty = Math.max(0, 55 - pitcherObj.stamina) * 0.16;
-  const raw = 123 + pitcherObj.velocity * 0.38 + pitchCatalog[pitchType].speedModifier - staminaPenalty + randomInt(-7, 7);
-  return Math.round(clamp(raw, 104, 164));
+  const raw = 128 + pitcherObj.velocity * 0.42 + pitchCatalog[pitchType].speedModifier - staminaPenalty + randomInt(-9, 9);
+  return Math.round(clamp(raw, 108, 170));
 }
 
 function calculatePitchMovement(pitcherObj, pitchType, batterObj) {
