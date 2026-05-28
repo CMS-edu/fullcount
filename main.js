@@ -16,7 +16,7 @@ const FIELD = {
   plate: { x: 480, y: 492 },
   catcher: { x: 480, y: 522 },
   batter: { x: 535, y: 478 },
-  strike: { x: 480, y: 512, w: 150, h: 62 },
+  strike: { x: 480, y: 512, w: 190, h: 62 },
   fielders: {
     p: { x: 480, y: 326 },
     c: { x: 480, y: 522 },
@@ -611,6 +611,10 @@ function updateBall(deltaTime) {
 function updateHitBall(deltaTime) {
   if (!game.hitBall) return;
   game.hitBall.t = clamp(game.hitBall.t + deltaTime / game.hitBall.duration, 0, 1);
+  if (!game.hitBall.fielderSent && game.hitBall.t >= game.hitBall.reactionDelay) {
+    game.hitBall.fielderSent = true;
+    sendFielderToBall(game.hitBall.end, game.hitBall.result);
+  }
   if (game.hitBall.t >= 1 && game.playPhase === "타구 처리") {
     game.playPhase = "판정 대기";
   }
@@ -767,7 +771,6 @@ function drawField() {
   ctx.closePath();
   ctx.stroke();
 
-  drawStrikeZoneGuide();
   drawBase(FIELD.first, "1B", Boolean(game.bases.first));
   drawBase(FIELD.second, "2B", Boolean(game.bases.second));
   drawBase(FIELD.third, "3B", Boolean(game.bases.third));
@@ -777,6 +780,7 @@ function drawField() {
   drawPlate();
   drawPitcher();
   drawCatcher();
+  drawStrikeZoneGuide();
 }
 
 function drawScoreboard() {
@@ -1046,19 +1050,27 @@ function drawPlate() {
 
 function drawStrikeZoneGuide() {
   const zone = FIELD.strike;
+  const left = zone.x - zone.w / 2 - 14;
+  const right = zone.x + zone.w / 2 + 14;
   ctx.save();
   ctx.lineCap = "round";
   ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 20;
+  ctx.beginPath();
+  ctx.moveTo(left, zone.y);
+  ctx.lineTo(right, zone.y);
+  ctx.stroke();
+  ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 13;
   ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2 - 14, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2 + 14, zone.y);
+  ctx.moveTo(left, zone.y);
+  ctx.lineTo(right, zone.y);
   ctx.stroke();
   ctx.strokeStyle = "#d71920";
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 9;
   ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2 - 14, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2 + 14, zone.y);
+  ctx.moveTo(left, zone.y);
+  ctx.lineTo(right, zone.y);
   ctx.stroke();
   ctx.restore();
 }
@@ -1417,7 +1429,8 @@ function startPitch(pitchType, mode) {
             : zone.y + randomInt(-Math.floor(zone.h / 2), Math.floor(zone.h / 2)),
     };
   }
-  const inZone = isPointInStrikeZone(end);
+  const pitchPath = { start: { ...FIELD.mound }, end, movement };
+  const inZone = pitchTouchesStrikeLine(pitchPath);
   game.pitchType = pitchType;
   game.pitchSpeed = speed;
   game.pitchMovement = movement;
@@ -1426,7 +1439,7 @@ function startPitch(pitchType, mode) {
     mode,
     x: FIELD.mound.x,
     y: FIELD.mound.y,
-    start: { ...FIELD.mound },
+    start: pitchPath.start,
     end,
     t: 0,
     duration: clamp(0.68 - (speed - 122) / 185 + randomInt(-6, 6) / 100, 0.22, 0.58),
@@ -1518,15 +1531,23 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
     return hasForceAtSecond && roll < 0.28 ? "병살타" : "땅볼아웃";
   }
 
-  if (contactQuality < 0.22) return "파울";
+  if (contactQuality >= 0.68 && timingDiff < 30 && contactScore > 68) {
+    if (sweet && powerScore > 132 && roll < 0.54) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 112 && batter.speed > 72 && roll < 0.12) return "3루타";
+    if (powerScore > 96 && roll < 0.34) return "2루타";
+    if (hasForceAtSecond && contactScore < 75 && roll < 0.08) return "병살타";
+    return roll < 0.78 ? "1루타" : roll < 0.9 ? "플라이아웃" : "땅볼아웃";
+  }
+
+  if (contactQuality < 0.18) return "파울";
   if (hasForceAtSecond && jammed && roll < 0.34) return "병살타";
-  if (jammed) return roll < 0.5 ? "땅볼아웃" : roll < 0.78 ? "파울" : "1루타";
-  if (under) return roll < 0.5 - launchBoost ? "플라이아웃" : roll < 0.72 ? "파울" : "1루타";
+  if (jammed) return roll < 0.54 ? "땅볼아웃" : roll < 0.66 ? "파울" : "1루타";
+  if (under) return roll < 0.52 - launchBoost ? "플라이아웃" : roll < 0.6 ? "파울" : "1루타";
   if (hasForceAtSecond && weak && roll < 0.28) return "병살타";
   if (weak) {
     if (roll < 0.34) return "땅볼아웃";
     if (roll < 0.62) return "플라이아웃";
-    if (roll < 0.84) return "1루타";
+    if (roll < 0.9) return "1루타";
     return "파울";
   }
 
@@ -1539,7 +1560,7 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
   if (powerScore > 126 && contactScore > 82 && roll < 0.18) return "홈런";
   if (powerScore > 104 && contactScore > 76 && roll < 0.3) return "2루타";
   if (powerScore > 108 && batter.speed > 78 && roll < 0.10) return "3루타";
-  return roll < 0.66 ? "1루타" : roll < 0.84 ? "파울" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
+  return roll < 0.72 ? "1루타" : roll < 0.82 ? "2루타" : roll < 0.9 ? "파울" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
 }
 
 function isSwingInContactWindow() {
@@ -1570,13 +1591,14 @@ function getBatBallContact() {
   if (!game.ball.active || !game.bat.held) return null;
   const segment = getBatWorldSegment();
   const projected = getSweptBallBatContact(segment);
-  const collisionRadius = game.buntMode ? 18 : 15;
+  const collisionRadius = game.buntMode ? 18 : 23;
   if (projected.distance > collisionRadius) return null;
+  const barrel = clamp((projected.along - 0.2) / 0.8, 0, 1);
   return {
     distance: projected.distance,
     along: projected.along,
-    quality: clamp(1 - projected.distance / collisionRadius, 0, 1),
-    sweetSpot: clamp(1 - Math.abs(projected.along - 0.72) / 0.5, 0, 1),
+    quality: clamp(1 - projected.distance / collisionRadius + barrel * 0.16, 0, 1),
+    sweetSpot: clamp(1 - Math.abs(projected.along - 0.7) / 0.48, 0, 1),
   };
 }
 
@@ -1601,19 +1623,21 @@ function getSweptBallBatContact(segment) {
 }
 
 function getBatWorldSegment() {
-  const origin = FIELD.batter;
   const rotation = Math.PI * 0.72 + game.bat.angle;
+  const start = batLocalToWorld(18, 0, rotation);
+  const end = batLocalToWorld(88, 0, rotation);
+  return {
+    start,
+    end,
+  };
+}
+
+function batLocalToWorld(x, y, rotation) {
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
   return {
-    start: {
-      x: origin.x + cos * 8,
-      y: origin.y + sin * 8,
-    },
-    end: {
-      x: origin.x + cos * 84,
-      y: origin.y + sin * 84,
-    },
+    x: FIELD.batter.x + x * cos - y * sin,
+    y: FIELD.batter.y + x * sin + y * cos,
   };
 }
 
@@ -1635,7 +1659,32 @@ function projectPointToSegment(point, start, end) {
 function isPointInStrikeZone(point) {
   const zone = FIELD.strike;
   const withinLineWidth = point.x >= zone.x - zone.w / 2 - 14 && point.x <= zone.x + zone.w / 2 + 14;
-  return withinLineWidth && Math.abs(point.y - zone.y) <= 10;
+  return withinLineWidth && Math.abs(point.y - zone.y) <= 9;
+}
+
+function pitchTouchesStrikeLine(ballLike) {
+  const zone = FIELD.strike;
+  const left = zone.x - zone.w / 2 - 14;
+  const right = zone.x + zone.w / 2 + 14;
+  let prev = getPitchPoint(ballLike, 0);
+  if (isPointInStrikeZone(prev)) return true;
+  for (let i = 1; i <= 32; i += 1) {
+    const point = getPitchPoint(ballLike, i / 32);
+    if (isPointInStrikeZone(point) || segmentTouchesStrikeLine(prev, point, zone.y, left, right)) return true;
+    prev = point;
+  }
+  return false;
+}
+
+function segmentTouchesStrikeLine(a, b, lineY, left, right) {
+  const tolerance = 9;
+  if (Math.max(a.y, b.y) < lineY - tolerance || Math.min(a.y, b.y) > lineY + tolerance) return false;
+  if (Math.abs(b.y - a.y) < 0.001) {
+    return Math.abs(a.y - lineY) <= tolerance && Math.max(a.x, b.x) >= left && Math.min(a.x, b.x) <= right;
+  }
+  const t = clamp((lineY - a.y) / (b.y - a.y), 0, 1);
+  const x = a.x + (b.x - a.x) * t;
+  return x >= left && x <= right;
 }
 
 function resolvePitchingResult(aiSwung) {
@@ -1670,6 +1719,7 @@ function resolvePitchingResult(aiSwung) {
 function resolveTakenPitch(mode) {
   const ball = game.ball;
   game.ball.active = false;
+  ball.inZone = pitchTouchesStrikeLine(ball);
   game.playPhase = mode === "batting" ? "지켜봄 판정" : "AI 지켜봄";
   if (mode === "batting" && game.bat.attempted) {
     addStrike("헛스윙!");
@@ -2074,8 +2124,9 @@ function startHitAnimation(result, distance, color) {
     end: target.end,
     color,
     result,
+    reactionDelay: isHomer ? 0.18 + Math.random() * 0.14 : 0.08 + Math.random() * 0.22,
+    fielderSent: false,
   };
-  sendFielderToBall(target.end, result);
 }
 
 function chooseFieldingTarget(result, distance) {
@@ -2096,8 +2147,8 @@ function chooseFieldingTarget(result, distance) {
             ? FIELD.fielders.SS
             : FIELD.fielders["3B"];
     const end = {
-      x: lane.x + randomInt(-46, 46) + direction * profile.slice,
-      y: lane.y + randomInt(2, 58),
+      x: lane.x + randomInt(-78, 78) + direction * profile.slice,
+      y: lane.y + randomInt(-18, 82),
     };
     return {
       end,
@@ -2116,8 +2167,8 @@ function chooseFieldingTarget(result, distance) {
             ? FIELD.fielders.LF
             : FIELD.fielders.CF;
     const end = {
-      x: lane.x + randomInt(-72, 72) + direction * profile.slice,
-      y: lane.y + randomInt(-24, 64),
+      x: lane.x + randomInt(-120, 120) + direction * profile.slice,
+      y: lane.y + randomInt(-44, 92),
     };
     return {
       end,
@@ -2126,7 +2177,7 @@ function chooseFieldingTarget(result, distance) {
   }
   return {
     end: {
-      x: FIELD.plate.x + direction * profile.distance + profile.slice,
+      x: FIELD.plate.x + direction * profile.distance + profile.slice + randomInt(-70, 70),
       y: result.includes("홈런") ? randomInt(-80, 18) : profile.landingY,
     },
     peak: {
@@ -2143,21 +2194,22 @@ function createBattedBallProfile(result, baseDistance) {
   const contactAlong = Number.isFinite(contact.along) ? contact.along : 0.62;
   const quality = Number.isFinite(contact.quality) ? contact.quality : 0.55;
   const powerScore = Number.isFinite(contact.powerScore) ? contact.powerScore : batter.power;
-  const earlyLate = clamp((0.7 - contactAlong) * 1.9 + batter.pull, -0.9, 0.9);
-  const sprayNoise = randomInt(-34, 34) / 100;
-  const direction = clamp(pullSide * earlyLate + sprayNoise, -1, 1);
-  const distanceNoise = randomInt(-70, 90);
+  const earlyLate = clamp((0.7 - contactAlong) * 1.45 + batter.pull, -0.85, 0.85);
+  const sprayNoise = randomInt(-68, 68) / 100;
+  const fieldBias = Math.random() < 0.28 ? (Math.random() < 0.5 ? -1 : 1) * randomInt(18, 48) / 100 : 0;
+  const direction = clamp(pullSide * earlyLate + sprayNoise + fieldBias, -1, 1);
+  const distanceNoise = randomInt(-110, 135);
   const distance =
     result.includes("홈런")
       ? 430 + quality * 150 + randomInt(-45, 80)
       : baseDistance * (0.72 + quality * 0.46) + powerScore * 1.25 + distanceNoise;
   const launch = clamp((batter.launch - 50) / 80 + quality * 0.65 + randomInt(-18, 18) / 100, 0.08, 1.5);
-  const slice = randomInt(-55, 55) + direction * randomInt(-24, 38);
+  const slice = randomInt(-95, 95) + direction * randomInt(-42, 64);
   return {
-    direction: Math.abs(direction) < 0.18 ? direction + (Math.random() < 0.5 ? -0.24 : 0.24) : direction,
+    direction,
     distance: clamp(distance, 120, result.includes("홈런") ? 660 : 520),
-    landingY: clamp(420 - distance * (0.42 + launch * 0.12) + randomInt(-42, 56), 72, 310),
-    peakY: clamp(410 - distance * (0.55 + launch * 0.3) + randomInt(-54, 42), -90, 260),
+    landingY: clamp(420 - distance * (0.42 + launch * 0.12) + randomInt(-74, 82), 72, 330),
+    peakY: clamp(410 - distance * (0.55 + launch * 0.3) + randomInt(-86, 62), -110, 275),
     slice,
   };
 }
