@@ -138,6 +138,10 @@ canvas {
   text-align: center;
 }
 
+.team-select-panel {
+  width: min(980px, calc(100% - 36px));
+}
+
 .screen-title {
   display: flex;
   align-items: end;
@@ -178,12 +182,32 @@ canvas {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 
+.team-grid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
 .player-card {
   display: grid;
   gap: 5px;
   min-height: 96px;
   text-align: left;
   background: #fffaf0;
+}
+
+.team-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 118px;
+  border-left-width: 12px;
+  border-left-color: var(--team-color, var(--kia-red));
+}
+
+.team-stripe {
+  display: block;
+  width: 100%;
+  height: 7px;
+  border: 2px solid #141414;
+  background: var(--team-color, var(--kia-red));
 }
 
 .player-card strong {
