@@ -689,7 +689,7 @@ function updateHitBall(deltaTime) {
 function updateThrowBall(deltaTime) {
   if (!game.throwBall) return;
   game.throwBall.timer += deltaTime;
-  if (game.throwBall.timer > game.throwBall.delay + game.throwBall.duration + 0.22) {
+  if (game.throwBall.timer > game.throwBall.delay + game.throwBall.duration + 0.75) {
     game.throwBall = null;
   }
 }
@@ -735,6 +735,7 @@ function draw() {
     if (game.half === "top") drawBatting();
     else drawPitching();
     drawResult();
+    drawThrowBall(true);
   }
   ctx.restore();
 }
@@ -1457,30 +1458,90 @@ function drawHitBall() {
   ctx.restore();
 }
 
-function drawThrowBall() {
+function drawThrowBall(frontLayer = false) {
   const throwBall = game.throwBall;
   if (!throwBall || throwBall.timer < throwBall.delay) return;
   const t = clamp((throwBall.timer - throwBall.delay) / throwBall.duration, 0, 1);
-  const x = throwBall.from.x + (throwBall.to.x - throwBall.from.x) * t;
-  const y = throwBall.from.y + (throwBall.to.y - throwBall.from.y) * t - Math.sin(t * Math.PI) * 24;
+  const arcPoint = (progress) => ({
+    x: throwBall.from.x + (throwBall.to.x - throwBall.from.x) * progress,
+    y: throwBall.from.y + (throwBall.to.y - throwBall.from.y) * progress - Math.sin(progress * Math.PI) * 36,
+  });
+  const pos = arcPoint(t);
   ctx.save();
-  ctx.strokeStyle = "#f4c24d";
-  ctx.lineWidth = 3;
-  ctx.setLineDash([8, 8]);
-  ctx.globalAlpha = 0.75;
+
+  ctx.globalAlpha = frontLayer ? 0.48 : 0.34;
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = frontLayer ? 13 : 10;
   ctx.beginPath();
-  ctx.moveTo(throwBall.from.x, throwBall.from.y);
-  ctx.lineTo(throwBall.to.x, throwBall.to.y);
+  for (let i = 0; i <= 26; i += 1) {
+    const point = arcPoint(i / 26);
+    if (i === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  }
+  ctx.stroke();
+
+  ctx.globalAlpha = frontLayer ? 0.98 : 0.86;
+  ctx.strokeStyle = "#ffd34d";
+  ctx.lineWidth = frontLayer ? 7 : 5;
+  ctx.setLineDash([14, 10]);
+  ctx.beginPath();
+  for (let i = 0; i <= 26; i += 1) {
+    const point = arcPoint(i / 26);
+    if (i === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  }
   ctx.stroke();
   ctx.setLineDash([]);
+
+  const trailStart = Math.max(0, t - 0.32);
+  for (let i = 0; i < 8; i += 1) {
+    const progress = trailStart + (t - trailStart) * (i / 7);
+    const point = arcPoint(progress);
+    ctx.globalAlpha = 0.16 + i * 0.09;
+    ctx.fillStyle = i > 5 ? "#ffffff" : "#ffd34d";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 5 + i * 0.45, 0, TWO_PI);
+    ctx.fill();
+  }
+
+  const pulse = 1 + Math.sin(throwBall.timer * 13) * 0.12;
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "#ff2b2b";
+  ctx.lineWidth = frontLayer ? 5 : 4;
+  ctx.beginPath();
+  ctx.arc(throwBall.to.x, throwBall.to.y, 17 * pulse, 0, TWO_PI);
+  ctx.stroke();
+
+  ctx.shadowColor = "#ffd34d";
+  ctx.shadowBlur = frontLayer ? 24 : 16;
   ctx.globalAlpha = 1;
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.arc(x, y, 6, 0, TWO_PI);
+  ctx.arc(pos.x, pos.y, frontLayer ? 11 : 9, 0, TWO_PI);
   ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.strokeStyle = "#d71920";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
   ctx.stroke();
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(pos.x - 2, pos.y, frontLayer ? 5 : 4, -1.1, 1.1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(pos.x + 2, pos.y, frontLayer ? 5 : 4, Math.PI - 1.1, Math.PI + 1.1);
+  ctx.stroke();
+
+  if (frontLayer) {
+    ctx.font = "900 18px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "#050505";
+    ctx.fillStyle = "#ffd34d";
+    ctx.strokeText("송구!", pos.x, pos.y - 17);
+    ctx.fillText("송구!", pos.x, pos.y - 17);
+  }
   ctx.restore();
 }
 
@@ -2077,6 +2138,19 @@ function makeRunnerPlan(runner, fromBase, toBase, fromNo, toNo, isBatter = false
 }
 
 function shouldTryExtraBase(runner, targetBase, battedBall, result) {
+  if (targetBase === "third") {
+    const runnerSpeedValue = runner?.speed || 60;
+    const targetPoint = battedBall?.end || FIELD.second;
+    const isDeepSingle = targetPoint.y < 215 || Math.abs(targetPoint.x - FIELD.plate.x) > 285;
+    const isGapSingle = targetPoint.y < 245 && Math.abs(targetPoint.x - FIELD.plate.x) > 205;
+    if (!isDeepSingle && !isGapSingle && runnerSpeedValue < 82) return Math.random() < 0.035;
+    const extraChance = clamp(
+      0.03 + (runnerSpeedValue - 65) / 220 + (isDeepSingle ? 0.14 : 0) + (isGapSingle ? 0.1 : 0),
+      0.03,
+      0.36
+    );
+    return Math.random() < extraChance;
+  }
   const speed = runner?.speed || 60;
   const target = battedBall?.end || FIELD.second;
   const deepBall = target.y < 235 || Math.abs(target.x - FIELD.plate.x) > 250;
@@ -2095,8 +2169,8 @@ function chooseThrowOutPlan(plans, battedBall, result) {
     .map((plan) => {
       const basePoint = getRunnerBasePoint(plan.toBase);
       const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
-      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 255 : 330;
-      const throwDuration = throwDistance / throwSpeed + 0.34 + Math.random() * 0.14;
+      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 220 : 285;
+      const throwDuration = Math.max(0.9, throwDistance / throwSpeed + 0.42 + Math.random() * 0.18);
       const throwArrival = defense.fieldTime + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
@@ -2150,7 +2224,7 @@ function queueOutThrow(battedBall, toBase, extraDelay = 0) {
     from: { ...defense.fieldPoint },
     to,
     delay: defense.fieldTime + extraDelay,
-    duration: distance / 315 + 0.34 + Math.random() * 0.14,
+    duration: Math.max(0.9, distance / 285 + 0.42 + Math.random() * 0.18),
     timer: 0,
   };
 }
@@ -2212,7 +2286,7 @@ function recordOut(count, text) {
   game.outs = clamp(game.outs + count, 0, 3);
   resetCount();
   nextBatter();
-  showResult(text, 1.15, () => {
+  showResult(text, resultDurationWithThrow(1.15), () => {
     if (game.outs >= 3) switchHalfInning();
     else resumeHalf();
   });
@@ -2227,10 +2301,15 @@ function nextBatter() {
 function finishPlateAppearance(text) {
   resetCount();
   nextBatter();
-  showResult(text, text.includes("홈런") ? 1.8 : 1.15, () => {
+  showResult(text, resultDurationWithThrow(text.includes("홈런") ? 1.8 : 1.15), () => {
     if (game.outs >= 3) switchHalfInning();
     else resumeHalf();
   });
+}
+
+function resultDurationWithThrow(baseDuration) {
+  if (!game.throwBall) return baseDuration;
+  return Math.max(baseDuration, game.throwBall.delay + game.throwBall.duration + 0.72);
 }
 
 function switchHalfInning(forceBottom = false) {
@@ -3138,6 +3217,13 @@ function saveRecord() {
     opponent: game.aiTeam.name,
   };
   localStorage.setItem("fullcount:record", JSON.stringify(game.record));
+  window.fullcountAuth?.saveMatch?.({
+    userTeam: currentUserTeam().name,
+    opponentTeam: game.aiTeam.name,
+    userScore: game.userScore,
+    opponentScore: game.aiScore,
+    innings: game.inning,
+  });
 }
 
 function loadRecord() {

@@ -1,46 +1,72 @@
 # 풀카운트
 
-KBO 팀을 선택해 플레이하는 2D 웹 야구 시뮬레이션입니다. 순수 HTML, CSS, JavaScript Canvas만 사용합니다.
+KBO 팀을 선택해서 플레이하는 2D 야구 시뮬레이션 웹 게임입니다. Canvas 기반 게임 화면에 계정, 로그인, 서버 저장 기능을 붙였습니다.
 
 ## 구성
 
-- `index.html`: 앱 진입점
-- `style.css`: 화면 레이아웃과 메뉴 UI
-- `main.js`: 선수 데이터, 게임 상태, Canvas 렌더링, 야구 규칙
-- `assets/`: 나중에 경기장, 타자, 투수, 공, 효과음 에셋을 넣을 자리
+- `index.html`: 앱 진입점, 홈/계정/로그인 영역, Canvas
+- `style.css`: 게임 UI와 계정 UI 스타일
+- `main.js`: 게임 데이터, 상태, Canvas 렌더링, 야구 로직
+- `auth.js`: 회원가입, 로그인, 계정 수정, 최근 경기 표시
+- `server.mjs`: 정적 파일 서버 + 인증/계정/경기 기록 API
+- `render.yaml`: Render 웹 서비스 + PostgreSQL Blueprint
 - `assets/team-logos/`: 팀 로고 이미지 폴더
-- `vercel.json`: Vercel 정적 배포용 라우팅
 
-## 실행
+## 로컬 실행
 
 ```bash
+npm install
 npm run dev
 ```
 
-기본 주소는 `http://127.0.0.1:5174` 입니다. 다른 포트가 필요하면 PowerShell에서 아래처럼 실행할 수 있습니다.
+기본 주소는 `http://127.0.0.1:5174`입니다.
+
+DB 없이 실행하면 회원가입/로그인은 메모리 저장소를 사용합니다. 서버를 재시작하면 로컬 메모리 계정은 사라집니다.
+
+PostgreSQL을 로컬이나 Render DB로 붙이고 싶으면 `DATABASE_URL`을 넣으면 됩니다.
 
 ```powershell
-$env:PORT="5175"; npm run dev
+$env:DATABASE_URL="postgres://USER:PASSWORD@HOST:5432/DBNAME"
+$env:SESSION_SECRET="아무거나-긴-랜덤문자"
+npm run dev
 ```
 
-## 현재 구현
+## 현재 API
 
-- 팀 선택 화면
-- 선택 팀 타자 중 9명 타순 선택
-- 선택 팀 선발투수 선택
-- 선택 팀 공격 타격 모드
-- 선택 팀 수비 투구 모드
-- 불펜 그룹별 투수 교체
-- 팀별 색상/로고 UI
-- 볼/스트라이크/아웃/주자/점수/이닝 진행
-- 스페이스/마우스 홀드 중 배트 회전, 손을 떼면 복귀
-- 투수/타자 능력치와 구종에 따른 구속, 궤적, 판정 변화
-- localStorage 최근 경기/최고 득점/라인업/선발 저장
+- `POST /api/auth/signup`: 회원가입
+- `POST /api/auth/login`: 로그인
+- `POST /api/auth/logout`: 로그아웃
+- `GET /api/auth/me`: 현재 로그인 계정
+- `PATCH /api/account`: 닉네임/응원팀 수정
+- `POST /api/matches`: 경기 결과 저장
+- `GET /api/matches/recent`: 최근 경기 기록
+- `GET /api/health`: 서버/DB 상태 확인
+
+## Render 배포
+
+Render에서 GitHub 저장소를 연결한 뒤 Blueprint로 `render.yaml`을 사용하면 됩니다. `fullcount` 웹 서비스와 `fullcount-db` PostgreSQL이 같이 만들어지고, `DATABASE_URL`과 `SESSION_SECRET`이 자동으로 연결됩니다.
+
+직접 Web Service로 만들 경우:
+
+- Runtime: Node
+- Build Command: `npm install`
+- Start Command: `npm start`
+- Environment Variables:
+  - `DATABASE_URL`: Render PostgreSQL connection string
+  - `SESSION_SECRET`: 긴 랜덤 문자열
+  - `NODE_ENV`: `production`
+
+## 앞으로 만들면 좋은 DB 테이블
+
+- `player_cards`: 유저가 수집/육성하는 선수 카드
+- `lineups`: 저장된 타순/선발/불펜 프리셋
+- `rankings`: 랭킹 캐시
+- `friends`: 친구/대전 초대
+- `inventory`: 유니폼, 배트, 야구장 스킨 같은 아이템
 
 ## 팀 로고 파일명
 
-아래 파일을 `assets/team-logos/`에 넣으면 자동으로 표시됩니다. 파일이 없으면 팀 색과 약칭 배지가 대신 나옵니다.
-지금 `assets/HT.png`, `assets/SS.png` 같은 기존 로고 파일도 예비 경로로 연결되어 있고, 아래 새 파일명이 있으면 새 파일을 우선 사용합니다.
+아래 파일을 `assets/team-logos/`에 넣으면 팀 선택, 스코어보드, 워터마크에 표시됩니다.
 
 - `kia-tigers.png`
 - `samsung-lions.png`
@@ -52,7 +78,3 @@ $env:PORT="5175"; npm run dev
 - `kt-wiz.png`
 - `ssg-landers.png`
 - `nc-dinos.png`
-
-## 배포
-
-GitHub에 올린 뒤 Vercel에서 Import 하면 정적 프론트엔드로 배포할 수 있습니다. Render는 나중에 랭킹, 로그인, 멀티플레이 같은 서버 기능이 생기면 API 서버용으로 붙이는 쪽이 좋습니다.
