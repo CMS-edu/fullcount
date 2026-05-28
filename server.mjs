@@ -43,7 +43,7 @@ async function bootDatabase() {
       ssl: process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
     });
     await pool.query(`
-      create table if not exists users (
+      create table if not exists fc_users (
         id bigserial primary key,
         email text unique not null,
         username text unique not null,
@@ -51,15 +51,15 @@ async function bootDatabase() {
         favorite_team text default 'KIA',
         created_at timestamptz not null default now()
       );
-      create table if not exists sessions (
+      create table if not exists fc_sessions (
         token_hash text primary key,
-        user_id bigint not null references users(id) on delete cascade,
+        user_id bigint not null references fc_users(id) on delete cascade,
         expires_at timestamptz not null,
         created_at timestamptz not null default now()
       );
-      create table if not exists match_records (
+      create table if not exists fc_match_records (
         id bigserial primary key,
-        user_id bigint references users(id) on delete cascade,
+        user_id bigint references fc_users(id) on delete cascade,
         user_team text not null,
         opponent_team text not null,
         user_score integer not null,
@@ -68,8 +68,8 @@ async function bootDatabase() {
         result text not null,
         created_at timestamptz not null default now()
       );
-      create index if not exists match_records_user_created_idx on match_records(user_id, created_at desc);
-      create index if not exists sessions_expires_idx on sessions(expires_at);
+      create index if not exists fc_match_records_user_created_idx on fc_match_records(user_id, created_at desc);
+      create index if not exists fc_sessions_expires_idx on fc_sessions(expires_at);
     `);
     dbReady = true;
     console.log("PostgreSQL connected.");
@@ -99,7 +99,7 @@ createServer(async (req, res) => {
       sendJson(res, 400, { error: "bad_json", message: "요청 형식이 올바르지 않습니다." });
       return;
     }
-    sendJson(res, 500, { error: "server_error" });
+    sendJson(res, 500, { error: "server_error", message: "서버 오류입니다. Render Logs를 확인해줘." });
   }
 }).listen(port, host, () => {
   console.log(`Fullcount server running at http://${host}:${port}`);
@@ -219,7 +219,7 @@ function serveStatic(url, res) {
 async function createUser({ email, username, passwordHash, favoriteTeam }) {
   if (pool) {
     const { rows } = await pool.query(
-      `insert into users (email, username, password_hash, favorite_team)
+      `insert into fc_users (email, username, password_hash, favorite_team)
        values ($1, $2, $3, $4)
        returning id, email, username, password_hash, favorite_team, created_at`,
       [email, username, passwordHash, favoriteTeam]
@@ -249,7 +249,7 @@ async function findUserByLogin(login) {
   if (pool) {
     const { rows } = await pool.query(
       `select id, email, username, password_hash, favorite_team, created_at
-       from users where email = $1 or username = $2 limit 1`,
+       from fc_users where email = $1 or username = $2 limit 1`,
       [email, username]
     );
     return rows[0] || null;
@@ -260,7 +260,7 @@ async function findUserByLogin(login) {
 async function findUserById(userId) {
   if (pool) {
     const { rows } = await pool.query(
-      `select id, email, username, password_hash, favorite_team, created_at from users where id = $1`,
+      `select id, email, username, password_hash, favorite_team, created_at from fc_users where id = $1`,
       [userId]
     );
     return rows[0] || null;
@@ -271,7 +271,7 @@ async function findUserById(userId) {
 async function updateUser(userId, { username, favoriteTeam }) {
   if (pool) {
     const { rows } = await pool.query(
-      `update users set username = $2, favorite_team = $3
+      `update fc_users set username = $2, favorite_team = $3
        where id = $1
        returning id, email, username, password_hash, favorite_team, created_at`,
       [userId, username, favoriteTeam]
@@ -289,7 +289,7 @@ async function createSession(userId) {
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
   if (pool) {
-    await pool.query(`insert into sessions (token_hash, user_id, expires_at) values ($1, $2, $3)`, [tokenHash, userId, expiresAt]);
+    await pool.query(`insert into fc_sessions (token_hash, user_id, expires_at) values ($1, $2, $3)`, [tokenHash, userId, expiresAt]);
   } else {
     memory.sessions.set(tokenHash, { user_id: userId, expires_at: expiresAt });
   }
@@ -298,7 +298,7 @@ async function createSession(userId) {
 
 async function deleteSession(token) {
   const tokenHash = hashToken(token);
-  if (pool) await pool.query(`delete from sessions where token_hash = $1`, [tokenHash]);
+  if (pool) await pool.query(`delete from fc_sessions where token_hash = $1`, [tokenHash]);
   else memory.sessions.delete(tokenHash);
 }
 
@@ -307,7 +307,7 @@ async function requireUser(req) {
   if (!token) return null;
   const tokenHash = hashToken(token);
   if (pool) {
-    const { rows } = await pool.query(`select user_id from sessions where token_hash = $1 and expires_at > now()`, [tokenHash]);
+    const { rows } = await pool.query(`select user_id from fc_sessions where token_hash = $1 and expires_at > now()`, [tokenHash]);
     return rows[0] ? findUserById(rows[0].user_id) : null;
   }
   const session = memory.sessions.get(tokenHash);
@@ -319,7 +319,7 @@ async function saveMatch(userId, match) {
   const result = match.userScore > match.opponentScore ? "win" : match.userScore < match.opponentScore ? "loss" : "draw";
   if (pool) {
     const { rows } = await pool.query(
-      `insert into match_records (user_id, user_team, opponent_team, user_score, opponent_score, innings, result)
+      `insert into fc_match_records (user_id, user_team, opponent_team, user_score, opponent_score, innings, result)
        values ($1, $2, $3, $4, $5, $6, $7)
        returning id, user_team, opponent_team, user_score, opponent_score, innings, result, created_at`,
       [userId, match.userTeam, match.opponentTeam, match.userScore, match.opponentScore, match.innings, result]
@@ -335,7 +335,7 @@ async function recentMatches(userId) {
   if (pool) {
     const { rows } = await pool.query(
       `select id, user_team, opponent_team, user_score, opponent_score, innings, result, created_at
-       from match_records where user_id = $1 order by created_at desc limit 10`,
+       from fc_match_records where user_id = $1 order by created_at desc limit 10`,
       [userId]
     );
     return rows;

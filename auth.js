@@ -210,8 +210,14 @@ async function api(path, options = {}) {
     headers: options.body ? { "Content-Type": "application/json" } : undefined,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || data.error || "요청 실패");
+  const raw = await response.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = { message: raw };
+  }
+  if (!response.ok) throw new Error(data.message || data.error || `요청 실패 (${response.status})`);
   return data;
 }
 
