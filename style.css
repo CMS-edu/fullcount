@@ -62,6 +62,10 @@ button.selected {
   border-color: var(--kia-red);
 }
 
+[hidden] {
+  display: none !important;
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -132,6 +136,12 @@ button:disabled {
 .nav-button {
   min-height: 40px;
   padding: 8px 12px;
+  box-shadow: 2px 2px 0 #141414;
+}
+
+.nav-button.selected {
+  background: #141414;
+  color: #fff;
 }
 
 .auth-panel {
@@ -193,6 +203,43 @@ button:disabled {
   color: #141414;
   font: inherit;
   font-weight: 800;
+}
+
+.auth-form select {
+  min-height: 42px;
+  border: 3px solid #050505;
+  border-radius: 0;
+  padding: 8px 10px;
+  background: #fffaf4;
+  color: #141414;
+  font: inherit;
+  font-weight: 800;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  align-items: center;
+}
+
+.settings-grid label,
+.online-log {
+  padding: 10px;
+  border: 3px solid #050505;
+  background: #fff4df;
+  color: #141414;
+  font-weight: 900;
+}
+
+.online-log {
+  display: grid;
+  gap: 4px;
+}
+
+.online-log p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .eyebrow {
@@ -338,6 +385,14 @@ canvas {
 .intro-panel h1 {
   margin: 0;
   color: var(--kia-dark);
+}
+
+.auth-card .screen-title h2 {
+  color: #fffaf4;
+}
+
+.auth-card .screen-title p {
+  color: #d6cabd;
 }
 
 .intro-panel h1 {

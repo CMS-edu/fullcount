@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
@@ -31,6 +31,8 @@ const memory = {
   sessions: new Map(),
   matches: [],
 };
+
+const rooms = new Map();
 
 let pool = null;
 let dbReady = false;
@@ -85,7 +87,7 @@ async function bootDatabase() {
 
 await bootDatabase();
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   const isApiRequest = url.pathname.startsWith("/api/");
   if (isApiRequest) applyCors(req, res);
@@ -112,7 +114,11 @@ createServer(async (req, res) => {
     }
     sendJson(res, 500, { error: "server_error", message: "서버 오류입니다. Render Logs를 확인해줘." });
   }
-}).listen(port, host, () => {
+});
+
+server.on("upgrade", handleWebSocketUpgrade);
+
+server.listen(port, host, () => {
   console.log(`Fullcount server running at http://${host}:${port}`);
 });
 
@@ -410,6 +416,204 @@ function applyCors(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Vary", "Origin");
+}
+
+function handleWebSocketUpgrade(req, socket) {
+  const url = new URL(req.url || "/", `http://${req.headers.host}`);
+  if (url.pathname !== "/ws") {
+    socket.destroy();
+    return;
+  }
+  const key = req.headers["sec-websocket-key"];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+  const accept = createHash("sha1")
+    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+    .digest("base64");
+  socket.write(
+    [
+      "HTTP/1.1 101 Switching Protocols",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Accept: ${accept}`,
+      "",
+      "",
+    ].join("\r\n")
+  );
+  const client = {
+    id: randomBytes(8).toString("hex"),
+    socket,
+    roomId: null,
+    seat: null,
+    team: null,
+    username: "Player",
+    ready: false,
+  };
+  socket.on("data", (buffer) => {
+    for (const message of decodeWebSocketMessages(buffer)) handleRealtimeMessage(client, message);
+  });
+  socket.on("close", () => leaveRealtimeRoom(client));
+  socket.on("error", () => leaveRealtimeRoom(client));
+  wsSend(client, { type: "connected", clientId: client.id });
+}
+
+function handleRealtimeMessage(client, message) {
+  let data;
+  try {
+    data = JSON.parse(message);
+  } catch {
+    wsSend(client, { type: "error", message: "잘못된 메시지입니다." });
+    return;
+  }
+  if (data.type === "create-room") {
+    leaveRealtimeRoom(client);
+    const roomId = createRoomId();
+    const room = { id: roomId, clients: new Set(), createdAt: Date.now(), status: "waiting" };
+    rooms.set(roomId, room);
+    joinRealtimeRoom(client, room, 1, data);
+    return;
+  }
+  if (data.type === "join-room") {
+    const roomId = String(data.roomId || "").trim().toUpperCase();
+    const room = rooms.get(roomId);
+    if (!room) return wsSend(client, { type: "error", message: "방을 찾을 수 없습니다." });
+    const seats = [...room.clients].map((player) => player.seat);
+    const seat = seats.includes(1) ? 2 : 1;
+    if (seats.includes(1) && seats.includes(2)) return wsSend(client, { type: "error", message: "이미 가득 찬 방입니다." });
+    leaveRealtimeRoom(client);
+    joinRealtimeRoom(client, room, seat, data);
+    return;
+  }
+  if (!client.roomId) return wsSend(client, { type: "error", message: "먼저 방에 들어가야 합니다." });
+  const room = rooms.get(client.roomId);
+  if (!room) return;
+  if (data.type === "ready") {
+    client.ready = Boolean(data.ready);
+    broadcastRoomState(room);
+    if ([...room.clients].length === 2 && [...room.clients].every((player) => player.ready)) {
+      room.status = "playing";
+      wsBroadcast(room, {
+        type: "start-match",
+        roomId: room.id,
+        players: roomPlayers(room),
+        seed: randomBytes(4).readUInt32BE(0),
+      });
+    }
+    return;
+  }
+  if (["game-input", "game-event", "game-state", "chat"].includes(data.type)) {
+    wsBroadcast(room, { ...data, from: client.seat, roomId: room.id }, client);
+  }
+}
+
+function joinRealtimeRoom(client, room, seat, data) {
+  client.roomId = room.id;
+  client.seat = seat;
+  client.team = String(data.team || "KIA").slice(0, 40);
+  client.username = String(data.username || `Player ${seat}`).slice(0, 24);
+  client.ready = false;
+  room.clients.add(client);
+  wsSend(client, { type: "room-joined", roomId: room.id, seat, players: roomPlayers(room) });
+  broadcastRoomState(room);
+}
+
+function leaveRealtimeRoom(client) {
+  if (!client.roomId) return;
+  const room = rooms.get(client.roomId);
+  if (room) {
+    room.clients.delete(client);
+    if (room.clients.size === 0) rooms.delete(room.id);
+    else broadcastRoomState(room);
+  }
+  client.roomId = null;
+  client.seat = null;
+  client.ready = false;
+}
+
+function broadcastRoomState(room) {
+  wsBroadcast(room, { type: "room-state", roomId: room.id, status: room.status, players: roomPlayers(room) });
+}
+
+function roomPlayers(room) {
+  return [...room.clients]
+    .sort((a, b) => a.seat - b.seat)
+    .map((client) => ({
+      seat: client.seat,
+      username: client.username,
+      team: client.team,
+      ready: client.ready,
+    }));
+}
+
+function createRoomId() {
+  let id;
+  do {
+    id = randomBytes(3).toString("hex").toUpperCase();
+  } while (rooms.has(id));
+  return id;
+}
+
+function wsBroadcast(room, payload, except = null) {
+  for (const client of room.clients) {
+    if (client !== except) wsSend(client, payload);
+  }
+}
+
+function wsSend(client, payload) {
+  if (!client?.socket || client.socket.destroyed) return;
+  client.socket.write(encodeWebSocketMessage(JSON.stringify(payload)));
+}
+
+function decodeWebSocketMessages(buffer) {
+  const messages = [];
+  let offset = 0;
+  while (offset + 2 <= buffer.length) {
+    const byte1 = buffer[offset++];
+    const byte2 = buffer[offset++];
+    const opcode = byte1 & 0x0f;
+    const masked = (byte2 & 0x80) !== 0;
+    let length = byte2 & 0x7f;
+    if (length === 126) {
+      if (offset + 2 > buffer.length) break;
+      length = buffer.readUInt16BE(offset);
+      offset += 2;
+    } else if (length === 127) {
+      if (offset + 8 > buffer.length) break;
+      length = Number(buffer.readBigUInt64BE(offset));
+      offset += 8;
+    }
+    const mask = masked ? buffer.subarray(offset, offset + 4) : null;
+    if (masked) offset += 4;
+    if (offset + length > buffer.length) break;
+    const payload = Buffer.from(buffer.subarray(offset, offset + length));
+    offset += length;
+    if (masked && mask) {
+      for (let i = 0; i < payload.length; i += 1) payload[i] ^= mask[i % 4];
+    }
+    if (opcode === 8) break;
+    if (opcode === 1) messages.push(payload.toString("utf8"));
+  }
+  return messages;
+}
+
+function encodeWebSocketMessage(message) {
+  const payload = Buffer.from(message);
+  const length = payload.length;
+  if (length < 126) return Buffer.concat([Buffer.from([0x81, length]), payload]);
+  if (length < 65536) {
+    const header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 126;
+    header.writeUInt16BE(length, 2);
+    return Buffer.concat([header, payload]);
+  }
+  const header = Buffer.alloc(10);
+  header[0] = 0x81;
+  header[1] = 127;
+  header.writeBigUInt64BE(BigInt(length), 2);
+  return Buffer.concat([header, payload]);
 }
 
 function setSessionCookie(res, token) {

@@ -135,6 +135,56 @@ const aiTeams = [
   opponentTeam("NC", "이호준", "창원", ["박민우", "손아섭", "박건우", "데이비슨", "권희동", "김휘집", "서호철", "김형준", "김주원"], ["하트", "신민혁", "이재학"], ["이용찬", "류진욱", "임정호", "김시훈"], "#1f5aa6"),
 ];
 
+const expandedTeamData = {
+  삼성: {
+    batters: ["김지찬", "이재현", "구자욱", "디아즈", "강민호", "김영웅", "류지혁", "김헌곤", "전병우", "이성규", "김성윤", "이병헌", "김현준", "공민규", "김재상", "안주형"],
+    starters: ["원태인", "후라도", "레예스", "백정현", "이승현", "황동재"],
+    bullpen: ["김재윤", "임창민", "오승환", "김태훈", "최하늘", "육선엽", "김대우", "이호성"],
+  },
+  LG: {
+    batters: ["홍창기", "박해민", "오스틴", "문보경", "오지환", "박동원", "신민재", "문성주", "김현수", "천성호", "구본혁", "이영빈", "문정빈", "이재원", "김현종", "최승민"],
+    starters: ["임찬규", "송승기", "톨허스트", "이정용", "손주영", "김윤식"],
+    bullpen: ["김진성", "함덕주", "장현식", "김영우", "우강훈", "박시원", "백승현", "유영찬"],
+  },
+  한화: {
+    batters: ["문현빈", "페라자", "노시환", "채은성", "안치홍", "하주석", "최재훈", "이진영", "황영묵", "김태연", "장진혁", "이도윤", "권광민", "이원석", "유로결"],
+    starters: ["류현진", "폰세", "문동주", "와이스", "김기중", "조동욱"],
+    bullpen: ["김서현", "주현상", "박상원", "한승혁", "정우주", "권민규", "김종수", "이상규"],
+  },
+  두산: {
+    batters: ["정수빈", "강승호", "양의지", "김재환", "양석환", "허경민", "라모스", "박준영", "조수행", "이유찬", "김대한", "전민재", "홍성호", "김민혁", "박계범"],
+    starters: ["곽빈", "최원준", "브랜든", "발라조빅", "최승용", "김동주"],
+    bullpen: ["김택연", "홍건희", "최지강", "이영하", "박치국", "이병헌", "김명신", "이교훈"],
+  },
+  롯데: {
+    batters: ["윤동희", "고승민", "빅터 레이예스", "나승엽", "전준우", "손호영", "박승욱", "손성빈", "유강남", "한태양", "전민재", "김세민", "이호준", "장두성", "김동현", "신윤후", "황성빈"],
+    starters: ["박세웅", "김진욱", "나균안", "제레미 비슬리", "찰리 반즈", "이승헌"],
+    bullpen: ["최준용", "김원중", "정철원", "구승민", "이민석", "박정민", "박준우", "박세진"],
+  },
+  키움: {
+    batters: ["이주형", "송성문", "김건희", "김태진", "고영우", "주성원", "원성준", "김웅빈", "이재상", "김혜성", "임지열", "이용규", "박수종", "변상권"],
+    starters: ["하영민", "후라도", "헤이수스", "조영건", "정찬헌", "김윤하"],
+    bullpen: ["문성현", "김재웅", "주승우", "김선기", "오석주", "박승주", "양지율", "이명종"],
+  },
+  KT: {
+    batters: ["김민혁", "강백호", "로하스", "문상철", "장성우", "황재균", "배정대", "오윤석", "안현민", "김상수", "권동진", "정준영", "조용호", "오재일"],
+    starters: ["고영표", "쿠에바스", "소형준", "벤자민", "엄상백", "원상현"],
+    bullpen: ["박영현", "김민수", "손동현", "주권", "우규민", "이상동", "김영현", "박시영"],
+  },
+  SSG: {
+    batters: ["최지훈", "정준재", "박성한", "에레디아", "최정", "한유섬", "김재환", "오태곤", "이지영", "김민식", "안상현", "홍대인", "채현우", "김성현", "김정민"],
+    starters: ["최민준", "김건우", "문승원", "타케다 쇼타", "앤서니 베네치아노", "히라모토 긴지로"],
+    bullpen: ["조병현", "김민", "이로운", "박시후", "한두솔", "전영준", "최용준", "이건욱"],
+  },
+  NC: {
+    batters: ["박민우", "김주원", "데이비슨", "박건우", "김형준", "최정원", "도태훈", "김한별", "오영수", "신재인", "한석현", "권희동", "이우성", "안중열", "김휘집"],
+    starters: ["구창모", "커티스 테일러", "라일리 톰슨", "토다 나츠키", "신영우", "김태경"],
+    bullpen: ["천사민", "김영규", "임지민", "김진호", "배재환", "이준혁", "김준원", "손주환"],
+  },
+};
+
+applyExpandedTeamData(aiTeams);
+
 const defaultLineupNames = ["박찬호", "김선빈", "김도영", "최형우", "나성범", "위즈덤", "이우성", "김태군", "최원준"];
 
 const teamVisuals = {
@@ -174,6 +224,13 @@ const playableTeams = [
 
 const game = {
   state: "intro",
+  mode: "ai",
+  onlineRoomId: "",
+  onlineSeat: null,
+  onlineSeq: 0,
+  onlineAppliedSeq: 0,
+  onlineWaiting: false,
+  applyingOnlineSnapshot: false,
   playPhase: "대기",
   inning: 1,
   half: "top",
@@ -227,6 +284,7 @@ const game = {
 
 let lastTime = 0;
 const logoImages = new Map();
+let onlineRealtimeUnsubscribe = null;
 
 function batter(name, position, bats, contact, power, speed, bunt, nickname, note) {
   const seed = nameSeed(name);
@@ -322,6 +380,69 @@ function opponentTeam(name, manager, stadium, batterNames, starterNames, bullpen
     )
   );
   return { name, manager, stadium, color, batters, starters: startersForTeam, bullpen };
+}
+
+function applyExpandedTeamData(teams) {
+  const positions = ["CF", "2B", "SS", "1B", "DH", "3B", "C", "LF", "RF", "IF", "OF", "C", "1B/OF", "UTIL", "OF"];
+  for (const team of teams) {
+    const data = expandedTeamData[team.name];
+    if (!data) continue;
+    team.batters = data.batters.map((name, index) => {
+      const seed = nameSeed(`${team.name}-${name}`);
+      const powerBoost = ["구자욱", "디아즈", "노시환", "오스틴", "데이비슨", "강백호", "로하스", "최정", "한유섬", "빅터 레이예스", "양의지", "김재환"].includes(name) ? 10 : 0;
+      const speedBoost = ["김지찬", "홍창기", "박해민", "신민재", "문현빈", "정수빈", "조수행", "윤동희", "황성빈", "최지훈", "박민우", "최정원"].includes(name) ? 10 : 0;
+      return batter(
+        name,
+        positions[index % positions.length],
+        index % 4 === 0 ? "L" : index % 5 === 0 ? "S" : "R",
+        clamp(62 + (seed % 28) + (index < 4 ? 5 : 0), 55, 94),
+        clamp(54 + ((seed >> 2) % 32) + powerBoost, 45, 97),
+        clamp(50 + ((seed >> 4) % 35) + speedBoost, 38, 96),
+        clamp(34 + ((seed >> 6) % 42), 20, 86),
+        `${team.name} 현역`,
+        "2026 현역 로스터 기반 게임 데이터"
+      );
+    });
+    team.starters = data.starters.map((name, index) => {
+      const seed = nameSeed(`${team.name}-SP-${name}`);
+      return pitcher(
+        name,
+        clamp(76 + (seed % 20), 70, 96),
+        clamp(70 + ((seed >> 2) % 24), 62, 94),
+        clamp(68 + ((seed >> 4) % 26), 60, 96),
+        clamp(82 + ((seed >> 6) % 20), 78, 104),
+        "선발",
+        [
+          ["직구", "슬라이더", "체인지업", "커브"],
+          ["직구", "투심", "스위퍼", "체인지업"],
+          ["직구", "커브", "슬라이더", "투심"],
+        ][index % 3],
+        index % 3 === 1 ? "L" : "R",
+        `${team.name} 선발 로테이션`
+      );
+    });
+    team.bullpen = data.bullpen.map((name, index) => {
+      const seed = nameSeed(`${team.name}-RP-${name}`);
+      return pitcher(
+        name,
+        clamp(78 + (seed % 19), 70, 97),
+        clamp(66 + ((seed >> 2) % 27), 55, 92),
+        clamp(66 + ((seed >> 4) % 28), 55, 94),
+        clamp(50 + ((seed >> 6) % 22), 42, 70),
+        index === 0 ? "마무리" : index <= 2 ? "필승조" : "불펜",
+        [
+          ["직구", "슬라이더", "스위퍼"],
+          ["직구", "커브", "체인지업"],
+          ["직구", "투심", "슬라이더"],
+          ["직구", "체인지업", "스위퍼"],
+        ][index % 4],
+        index % 4 === 2 ? "L" : "R",
+        `${team.name} 불펜`
+      );
+    });
+    team.bullpenGroups = makeOpponentBullpenGroups(team.bullpen);
+    team.defaultLineupNames = team.batters.slice(0, 9).map((player) => player.name);
+  }
 }
 
 function makeOpponentBullpenGroups(bullpen) {
@@ -421,6 +542,38 @@ function teamLogoMarkup(team, extraClass = "") {
 function currentUserTeam() {
   if (!game.userTeam) game.userTeam = loadSavedTeam();
   return game.userTeam;
+}
+
+function isPvPMode() {
+  return game.mode === "localPvp" || game.mode === "onlinePvp";
+}
+
+function isOnlinePvp() {
+  return game.mode === "onlinePvp";
+}
+
+function onlineControlSeat() {
+  return game.half === "top" ? 1 : 2;
+}
+
+function canControlOnlineHalf() {
+  return !isOnlinePvp() || !game.onlineSeat || game.onlineSeat === onlineControlSeat();
+}
+
+function canUseLocalControls() {
+  return !isOnlinePvp() || canControlOnlineHalf();
+}
+
+function getOffenseTeam() {
+  return game.half === "top" ? currentUserTeam() : game.aiTeam;
+}
+
+function getDefenseTeam() {
+  return game.half === "top" ? game.aiTeam : currentUserTeam();
+}
+
+function battingPitcher() {
+  return game.half === "top" ? game.aiPitcher : game.currentPitcher;
 }
 
 function getTeamByName(name) {
@@ -537,6 +690,7 @@ function selectPitcher(selected) {
 }
 
 function startGame() {
+  if (!isPvPMode()) game.mode = "ai";
   game.state = "batting";
   game.playPhase = "투구 대기";
   game.half = "top";
@@ -544,6 +698,179 @@ function startGame() {
   resetCount();
   syncCurrentMatchup();
   prepareBattingPitch();
+  renderUI(true);
+}
+
+function startOnlinePvp({ roomId = "", seat = null, teamA, teamB } = {}) {
+  const firstTeam = getTeamByName(teamA) || currentUserTeam();
+  const secondTeam = getTeamByName(teamB) || chooseOpponentTeam();
+  game.mode = "onlinePvp";
+  game.onlineRoomId = roomId;
+  game.onlineSeat = seat;
+  game.onlineSeq = 0;
+  game.onlineAppliedSeq = 0;
+  game.onlineWaiting = false;
+  setupOnlineRealtime();
+  game.userTeam = firstTeam;
+  game.aiTeam = secondTeam.name === firstTeam.name ? chooseOpponentTeam() : secondTeam;
+  game.selectedLineup = getDefaultLineup(firstTeam);
+  game.selectedPitcher = clonePitcher(firstTeam.starters[0]);
+  game.currentPitcher = clonePitcher(firstTeam.starters[0]);
+  game.aiPitcher = clonePitcher(game.aiTeam.starters[0]);
+  game.battingOrderIndex = 0;
+  game.aiBattingOrderIndex = 0;
+  localStorage.setItem("fullcount:userTeam", firstTeam.name);
+  startGame();
+}
+
+function setupOnlineRealtime() {
+  if (onlineRealtimeUnsubscribe) onlineRealtimeUnsubscribe();
+  onlineRealtimeUnsubscribe = window.fullcountRealtime?.onGameEvent?.((message) => {
+    const event = message.event || message;
+    if (event.kind === "snapshot") applyOnlineSnapshot(event.snapshot);
+  });
+}
+
+function broadcastOnlineSnapshot(reason) {
+  if (!isOnlinePvp() || !canControlOnlineHalf() || game.applyingOnlineSnapshot) return;
+  window.fullcountRealtime?.sendGameEvent?.({
+    kind: "snapshot",
+    snapshot: exportOnlineSnapshot(reason),
+  });
+}
+
+function exportOnlineSnapshot(reason) {
+  return {
+    version: 1,
+    reason,
+    roomId: game.onlineRoomId,
+    seq: ++game.onlineSeq,
+    state: game.state,
+    playPhase: game.playPhase,
+    inning: game.inning,
+    half: game.half,
+    userScore: game.userScore,
+    aiScore: game.aiScore,
+    outs: game.outs,
+    balls: game.balls,
+    strikes: game.strikes,
+    battingOrderIndex: game.battingOrderIndex,
+    aiBattingOrderIndex: game.aiBattingOrderIndex,
+    bases: {
+      first: game.bases.first?.name || null,
+      second: game.bases.second?.name || null,
+      third: game.bases.third?.name || null,
+    },
+    currentPitcher: pitcherSnapshot(game.currentPitcher),
+    aiPitcher: pitcherSnapshot(game.aiPitcher),
+    resultText: game.resultText,
+    resultTimer: game.resultTimer,
+  };
+}
+
+function pitcherSnapshot(pitcherObj) {
+  if (!pitcherObj) return null;
+  return {
+    name: pitcherObj.name,
+    stamina: pitcherObj.stamina,
+    maxStamina: pitcherObj.maxStamina,
+  };
+}
+
+function applyOnlineSnapshot(snapshot) {
+  if (!snapshot || snapshot.version !== 1) return;
+  if (snapshot.roomId && game.onlineRoomId && snapshot.roomId !== game.onlineRoomId) return;
+  if (snapshot.seq <= game.onlineAppliedSeq) return;
+  game.applyingOnlineSnapshot = true;
+  game.onlineAppliedSeq = snapshot.seq;
+  game.inning = snapshot.inning;
+  game.half = snapshot.half;
+  game.userScore = snapshot.userScore;
+  game.aiScore = snapshot.aiScore;
+  game.outs = snapshot.outs;
+  game.balls = snapshot.balls;
+  game.strikes = snapshot.strikes;
+  game.battingOrderIndex = snapshot.battingOrderIndex;
+  game.aiBattingOrderIndex = snapshot.aiBattingOrderIndex;
+  game.currentPitcher = hydratePitcherSnapshot(snapshot.currentPitcher, currentUserTeam(), game.currentPitcher);
+  game.aiPitcher = hydratePitcherSnapshot(snapshot.aiPitcher, game.aiTeam, game.aiPitcher);
+  game.bases = {
+    first: hydrateRunner(snapshot.bases?.first),
+    second: hydrateRunner(snapshot.bases?.second),
+    third: hydrateRunner(snapshot.bases?.third),
+  };
+  syncCurrentMatchup();
+  game.hitBall = null;
+  game.throwBall = null;
+  resetFielderTargets(true);
+  resetBatState();
+
+  if (snapshot.state === "gameOver") {
+    game.state = "gameOver";
+    game.applyingOnlineSnapshot = false;
+    renderUI(true);
+    return;
+  }
+
+  if (snapshot.state === "result" || snapshot.state === "inningChange") {
+    game.state = snapshot.state;
+    game.playPhase = snapshot.playPhase || "온라인 결과";
+    game.resultText = snapshot.resultText || "";
+    game.resultTimer = Math.max(0.85, snapshot.resultTimer || 1);
+    game.resultDuration = game.resultTimer;
+    game.resultNext = () => {
+      if (canControlOnlineHalf()) prepareBattingPitch();
+      else setOnlineWaiting();
+    };
+  } else if (canControlOnlineHalf()) {
+    prepareBattingPitch();
+  } else {
+    setOnlineWaiting();
+  }
+  game.applyingOnlineSnapshot = false;
+  renderUI(true);
+}
+
+function hydratePitcherSnapshot(snapshot, team, fallback) {
+  if (!snapshot?.name) return fallback;
+  const pool = [...(team?.starters || []), ...(team?.bullpen || []), ...Object.values(team?.bullpenGroups || {}).flat()];
+  const source = pool.find((pitcherObj) => pitcherObj.name === snapshot.name) || fallback || snapshot;
+  if (!source?.pitches) return fallback || null;
+  const hydrated = clonePitcher(source);
+  hydrated.stamina = Number.isFinite(snapshot.stamina) ? snapshot.stamina : hydrated.stamina;
+  hydrated.maxStamina = Number.isFinite(snapshot.maxStamina) ? snapshot.maxStamina : hydrated.maxStamina;
+  return hydrated;
+}
+
+function hydrateRunner(name) {
+  if (!name) return null;
+  const pool = [...(game.selectedLineup || []), ...(currentUserTeam().batters || []), ...(game.aiTeam?.batters || [])];
+  const found = pool.find((runner) => runner.name === name);
+  return { name, speed: found?.speed || 60 };
+}
+
+function resetBatState() {
+  game.ball = makeBall();
+  game.ball.active = false;
+  game.bat.contacted = false;
+  game.bat.attempted = false;
+  game.bat.held = false;
+  game.bat.angle = game.bat.neutral;
+  game.bat.spin = 0;
+  game.lastContact = null;
+  game.buntMode = false;
+}
+
+function setOnlineWaiting() {
+  game.state = "batting";
+  game.onlineWaiting = true;
+  game.ball = makeBall();
+  game.hitBall = null;
+  game.throwBall = null;
+  game.pitchDelay = 999;
+  game.playPhase = `P${onlineControlSeat()} 공격 대기`;
+  resetFielderTargets(true);
+  resetBatState();
   renderUI(true);
 }
 
@@ -589,6 +916,11 @@ function update(deltaTime) {
 function updateIntro() {}
 
 function updateBatting(deltaTime) {
+  if (isOnlinePvp() && !canControlOnlineHalf()) {
+    game.playPhase = `P${onlineControlSeat()} 공격 대기`;
+    game.ball.active = false;
+    return;
+  }
   if (!game.ball.active) {
     game.playPhase = "투구 대기";
     game.pitchDelay -= deltaTime;
@@ -732,7 +1064,7 @@ function draw() {
   if (game.state === "batting") drawBatting();
   if (game.state === "pitching") drawPitching();
   if (game.state === "result" || game.state === "inningChange") {
-    if (game.half === "top") drawBatting();
+    if (game.half === "top" || isPvPMode()) drawBatting();
     else drawPitching();
     drawResult();
     drawThrowBall(true);
@@ -945,7 +1277,7 @@ function drawScoreboard() {
   ctx.fillText(`${game.inning}회 ${game.half === "top" ? "초" : "말"} · ${game.playPhase}`, 24, 64);
 
   const batter = game.currentBatter?.name || "-";
-  const pitcherName = (game.half === "top" ? game.aiPitcher : game.currentPitcher)?.name || "-";
+  const pitcherName = (game.state === "batting" || isPvPMode() ? battingPitcher() : game.currentPitcher)?.name || "-";
   ctx.textAlign = "right";
   ctx.fillStyle = "#fff";
   ctx.font = "900 16px Segoe UI";
@@ -959,9 +1291,9 @@ function drawScoreboard() {
 
 function drawGameHUD() {
   const batter = game.currentBatter;
-  const pitcherObj = game.half === "top" ? game.aiPitcher : game.currentPitcher;
-  const offenseTeam = game.half === "top" ? currentUserTeam() : game.aiTeam;
-  const moundTeam = game.half === "top" ? game.aiTeam : currentUserTeam();
+  const pitcherObj = game.state === "batting" || isPvPMode() ? battingPitcher() : game.currentPitcher;
+  const offenseTeam = getOffenseTeam();
+  const moundTeam = getDefenseTeam();
   ctx.save();
   ctx.fillStyle = "#050505";
   ctx.fillRect(16, 84, 928, 50);
@@ -1587,7 +1919,7 @@ function drawCountDots(x, y) {
 
 function drawPlayerInfoPanels() {
   const batter = game.currentBatter;
-  const pitcherObj = game.half === "top" ? game.aiPitcher : game.currentPitcher;
+  const pitcherObj = game.state === "batting" || isPvPMode() ? battingPitcher() : game.currentPitcher;
   drawInfoCard(22, 102, "타자", batter, [
     `포지션 ${batter?.position || "-"}`,
     `컨택 ${batter?.contact || "-"} · 파워 ${batter?.power || "-"}`,
@@ -1632,7 +1964,8 @@ function drawCenterHint(text) {
 }
 
 function startPitch(pitchType, mode) {
-  if (mode === "batting" && game.aiPitcher.stamina <= 0) autoChangeAIPitcher();
+  if (mode === "batting" && !canUseLocalControls()) return;
+  if (mode === "batting" && game.half === "top" && game.aiPitcher.stamina <= 0) autoChangeAIPitcher();
   if (mode === "pitching" && game.currentPitcher.stamina <= 0) {
     game.warning = "투수 체력 0 - 교체 필요";
     showResult("투수 교체 필요!", 0.9, () => {
@@ -1642,7 +1975,7 @@ function startPitch(pitchType, mode) {
     return;
   }
 
-  const pitcherObj = mode === "batting" ? game.aiPitcher : game.currentPitcher;
+  const pitcherObj = mode === "batting" ? battingPitcher() : game.currentPitcher;
   const batterObj = mode === "batting" ? game.currentBatter : getAIBatter();
   pitchType = chooseFatiguedPitch(pitcherObj, pitchType);
   const fatigue = getFatigueLevel(pitcherObj);
@@ -1718,6 +2051,7 @@ function startPitch(pitchType, mode) {
 }
 
 function swingBat() {
+  if (!canUseLocalControls()) return;
   if (game.state !== "batting" || !game.ball.active || game.bat.contacted) return;
   game.bat.contacted = true;
   game.isSwinging = true;
@@ -1732,7 +2066,8 @@ function resolveBattingResult() {
   const contactQuality = contact ? (contact.quality * 0.65 + contact.sweetSpot * 0.35) : 0;
   const timingDiff = Math.abs(ball.t - 0.84) * 82 + (1 - contactQuality) * 26;
   const timingBonus = clamp(70 - timingDiff * 1.35, -30, 70);
-  const pitchDifficulty = ball.speed * 0.22 + Math.abs(ball.movement.x) * 0.32 + Math.abs(ball.movement.y) * 0.16 + game.aiPitcher.control * 0.12;
+  const activePitcher = battingPitcher();
+  const pitchDifficulty = ball.speed * 0.22 + Math.abs(ball.movement.x) * 0.32 + Math.abs(ball.movement.y) * 0.16 + activePitcher.control * 0.12;
   const contactScore = batter.contact + timingBonus + contactQuality * 24 - pitchDifficulty * 0.36 + randomInt(-10, 14);
   const powerScore = batter.power + game.swingPower * 0.72 + contactQuality * 18 - pitchDifficulty * 0.18 + randomInt(-14, 16);
   game.swingTiming = Math.round(100 - timingDiff);
@@ -2323,9 +2658,13 @@ function switchHalfInning(forceBottom = false) {
     game.state = "inningChange";
     game.playPhase = "공수교대";
     showResult(`${game.inning}회 말`, 1.0, () => {
-      game.state = "pitching";
-      game.playPhase = "구종 선택";
-      game.selectedPitch = game.currentPitcher.pitches[0];
+      if (isPvPMode()) {
+        prepareBattingPitch();
+      } else {
+        game.state = "pitching";
+        game.playPhase = "구종 선택";
+        game.selectedPitch = game.currentPitcher.pitches[0];
+      }
       syncCurrentMatchup();
       renderUI(true);
     });
@@ -2349,6 +2688,7 @@ function checkGameEnd() {
   if (game.userScore === game.aiScore && game.inning <= 10) return false;
   game.state = "gameOver";
   saveRecord();
+  broadcastOnlineSnapshot("gameOver");
   renderUI(true);
   return true;
 }
@@ -2471,8 +2811,13 @@ function changePitcher(newPitcher) {
 }
 
 function prepareBattingPitch() {
-  maybeAutoChangeAIPitcher();
+  if (game.half === "top") maybeAutoChangeAIPitcher();
+  if (isOnlinePvp() && !canControlOnlineHalf()) {
+    setOnlineWaiting();
+    return;
+  }
   game.state = "batting";
+  game.onlineWaiting = false;
   game.playPhase = "투구 대기";
   game.pitchDelay = 0.6 + Math.random() * 0.55;
   game.ball = makeBall();
@@ -2486,10 +2831,11 @@ function prepareBattingPitch() {
   game.bat.spin = 0;
   game.lastContact = null;
   game.buntMode = false;
+  broadcastOnlineSnapshot("ready");
 }
 
 function resumeHalf() {
-  if (game.half === "top") prepareBattingPitch();
+  if (game.half === "top" || isPvPMode()) prepareBattingPitch();
   else {
     game.state = "pitching";
     game.playPhase = "구종 선택";
@@ -2646,8 +2992,8 @@ function chooseFieldingTarget(result, distance) {
             ? FIELD.fielders.SS
             : FIELD.fielders["3B"];
     const end = clampFairPoint({
-      x: lane.x + randomInt(-78, 78) + direction * profile.slice,
-      y: lane.y + randomInt(-18, 82),
+      x: lane.x + randomInt(-118, 118) + direction * profile.slice,
+      y: lane.y + randomInt(-34, 108),
     });
     return {
       end,
@@ -2666,8 +3012,8 @@ function chooseFieldingTarget(result, distance) {
             ? FIELD.fielders.LF
             : FIELD.fielders.CF;
     const end = clampFairPoint({
-      x: lane.x + randomInt(-120, 120) + direction * profile.slice,
-      y: lane.y + randomInt(-44, 92),
+      x: lane.x + randomInt(-170, 170) + direction * profile.slice,
+      y: lane.y + randomInt(-66, 126),
     });
     return {
       end,
@@ -2716,16 +3062,16 @@ function createBattedBallProfile(result, baseDistance) {
   const quality = Number.isFinite(contact.quality) ? contact.quality : 0.55;
   const powerScore = Number.isFinite(contact.powerScore) ? contact.powerScore : batter.power;
   const earlyLate = clamp((0.7 - contactAlong) * 1.45 + batter.pull, -0.85, 0.85);
-  const sprayNoise = randomInt(-68, 68) / 100;
-  const fieldBias = Math.random() < 0.28 ? (Math.random() < 0.5 ? -1 : 1) * randomInt(18, 48) / 100 : 0;
+  const sprayNoise = randomInt(-95, 95) / 100;
+  const fieldBias = Math.random() < 0.42 ? (Math.random() < 0.5 ? -1 : 1) * randomInt(18, 70) / 100 : 0;
   const direction = clamp(pullSide * earlyLate + sprayNoise + fieldBias, -1, 1);
-  const distanceNoise = randomInt(-110, 135);
+  const distanceNoise = randomInt(-155, 175);
   const distance =
     result.includes("홈런")
       ? 430 + quality * 150 + randomInt(-45, 80)
       : baseDistance * (0.72 + quality * 0.46) + powerScore * 1.25 + distanceNoise;
   const launch = clamp((batter.launch - 50) / 80 + quality * 0.65 + randomInt(-18, 18) / 100, 0.08, 1.5);
-  const slice = randomInt(-95, 95) + direction * randomInt(-42, 64);
+  const slice = randomInt(-135, 135) + direction * randomInt(-60, 92);
   return {
     direction,
     distance: clamp(distance, 120, result.includes("홈런") ? 660 : 520),
@@ -2743,8 +3089,9 @@ function sendFielderToBall(target, result) {
       : game.fielders.filter((f) => ["1B", "2B", "SS", "3B", "p"].includes(f.label));
   const fielder = nearestFielder(candidates, target);
   if (!fielder) return;
-  fielder.targetX = target.x;
-  fielder.targetY = target.y;
+  const routeJitter = result.includes("아웃") || result === "병살타" ? 10 : 26;
+  fielder.targetX = target.x + randomInt(-routeJitter, routeJitter);
+  fielder.targetY = target.y + randomInt(-routeJitter, routeJitter);
   fielder.active = true;
   fielder.hasBall = result.includes("아웃") || result === "병살타";
 }
@@ -2887,6 +3234,7 @@ function handleMouseUp() {
 
 function setSwingHeld(held) {
   if (game.state !== "batting") return;
+  if (!canUseLocalControls()) return;
   if (held && !game.bat.held) {
     game.bat.spin = 0;
     game.bat.angle = game.bat.neutral;
@@ -2904,6 +3252,7 @@ function toggleFullscreen() {
 }
 
 function trySteal() {
+  if (!canUseLocalControls()) return;
   if (game.state !== "batting" || !game.bases.first) return showResult("도루할 1루 주자 없음", 0.8, resumeHalf);
   const runner = game.bases.first;
   const success = Math.random() < clamp(0.28 + runner.speed / 145, 0.35, 0.86);
@@ -3206,6 +3555,7 @@ function showResult(text, duration = 1.1, next = resumeHalf) {
   game.resultTimer = duration;
   game.resultDuration = duration;
   game.resultNext = next;
+  broadcastOnlineSnapshot("result");
   renderUI(true);
 }
 
@@ -3297,6 +3647,10 @@ window.render_game_to_text = () =>
   JSON.stringify({
     note: "Canvas origin top-left, x right, y down.",
     state: game.state,
+    mode: game.mode,
+    online: isOnlinePvp()
+      ? { roomId: game.onlineRoomId, seat: game.onlineSeat, controlSeat: onlineControlSeat(), waiting: game.onlineWaiting }
+      : null,
     playPhase: game.playPhase,
     inning: game.inning,
     half: game.half,
@@ -3315,5 +3669,12 @@ window.render_game_to_text = () =>
       : null,
     result: game.resultText,
   });
+
+window.fullcountGame = {
+  teams: () => playableTeams.map((team) => ({ name: team.name, shortName: team.shortName || team.name })),
+  startOnlinePvp,
+  startLocalPvp: (teamA, teamB) => startOnlinePvp({ roomId: "LOCAL", seat: 1, teamA, teamB }),
+  state: () => JSON.parse(window.render_game_to_text()),
+};
 
 init();
