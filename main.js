@@ -190,11 +190,47 @@ const game = {
 let lastTime = 0;
 
 function batter(name, position, bats, contact, power, speed, bunt, nickname, note) {
-  return { name, position, bats, contact, power, speed, bunt, nickname, note };
+  const seed = nameSeed(name);
+  return {
+    name,
+    position,
+    bats,
+    contact,
+    power,
+    speed,
+    bunt,
+    nickname,
+    note,
+    eye: clamp(Math.round(contact * 0.58 + bunt * 0.22 + (seed % 18)), 35, 96),
+    launch: clamp(Math.round(power * 0.55 + speed * 0.12 + ((seed >> 2) % 24)), 32, 98),
+    pull: ((seed % 21) - 10) / 100,
+  };
 }
 
 function pitcher(name, velocity, control, breaking, stamina, role, pitches, hand = "R", note = "") {
-  return { name, velocity, control, breaking, stamina, maxStamina: stamina, role, pitches: [...pitches], hand, note };
+  const seed = nameSeed(name);
+  const roleType = stamina >= 74 ? "starter" : "bullpen";
+  const maxStamina =
+    roleType === "starter"
+      ? clamp(Math.round(92 + (stamina - 84) * 0.85 + (seed % 9)), 82, 112)
+      : clamp(Math.round(28 + (stamina - 55) * 0.45 + (seed % 7)), 20, 42);
+  return {
+    name,
+    velocity,
+    control,
+    breaking,
+    stamina: maxStamina,
+    maxStamina,
+    role,
+    roleType,
+    pitches: [...new Set(pitches)],
+    hand,
+    note,
+    stuff: clamp(Math.round((velocity + breaking) / 2 + ((seed % 13) - 6)), 45, 99),
+    composure: clamp(Math.round(control * 0.75 + stamina * 0.18 + (seed % 10)), 45, 98),
+    fatigueRate: roleType === "starter" ? 0.86 + (seed % 7) / 20 : 1.02 + (seed % 7) / 14,
+    speedVariance: 5 + (seed % 7),
+  };
 }
 
 function opponentTeam(name, manager, stadium, batterNames, starterNames, bullpenNames, color) {
@@ -219,7 +255,11 @@ function opponentTeam(name, manager, stadium, batterNames, starterNames, bullpen
       70 + ((name.charCodeAt(0) + i * 8) % 24),
       78 + ((name.charCodeAt(0) + i * 6) % 20),
       "상대 선발",
-      i === 0 ? ["직구", "슬라이더", "체인지업", "커브"] : ["직구", "투심", "슬라이더", "스위퍼"],
+      [
+        ["직구", "슬라이더", "체인지업", "커브"],
+        ["직구", "투심", "스위퍼", "체인지업"],
+        ["직구", "커브", "슬라이더", "투심"],
+      ][i % 3],
       i % 2 ? "L" : "R",
       `${name} 선발진`
     )
@@ -232,12 +272,21 @@ function opponentTeam(name, manager, stadium, batterNames, starterNames, bullpen
       70 + ((name.charCodeAt(0) + i * 7) % 22),
       48 + ((name.charCodeAt(0) + i * 5) % 18),
       i === 0 ? "마무리" : "불펜",
-      ["직구", "슬라이더", i % 2 ? "커브" : "체인지업"],
+      [
+        ["직구", "슬라이더", "스위퍼"],
+        ["직구", "커브", "체인지업"],
+        ["직구", "투심", "슬라이더"],
+        ["직구", "체인지업", "스위퍼"],
+      ][i % 4],
       i % 2 ? "L" : "R",
       `${name} 불펜`
     )
   );
   return { name, manager, stadium, color, batters, starters: startersForTeam, bullpen };
+}
+
+function nameSeed(name) {
+  return [...String(name)].reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
 }
 
 function makeBall() {
@@ -1140,23 +1189,48 @@ function drawCenterHint(text) {
 }
 
 function startPitch(pitchType, mode) {
+  if (mode === "batting" && game.aiPitcher.stamina <= 0) autoChangeAIPitcher();
+  if (mode === "pitching" && game.currentPitcher.stamina <= 0) {
+    game.warning = "투수 체력 0 - 교체 필요";
+    showResult("투수 교체 필요!", 0.9, () => {
+      game.state = "bullpen";
+      renderUI(true);
+    });
+    return;
+  }
+
   const pitcherObj = mode === "batting" ? game.aiPitcher : game.currentPitcher;
   const batterObj = mode === "batting" ? game.currentBatter : getAIBatter();
+  pitchType = chooseFatiguedPitch(pitcherObj, pitchType);
+  const fatigue = getFatigueLevel(pitcherObj);
   const speed = calculatePitchSpeed(pitcherObj, pitchType);
   const movement = calculatePitchMovement(pitcherObj, pitchType, batterObj);
-  const controlChance = clamp((pitcherObj.control + pitcherObj.stamina * 0.25 - pitchCatalog[pitchType].controlDifficulty) / 100, 0.24, 0.88);
+  const controlChance = clamp(
+    (pitcherObj.control + getStaminaPercent(pitcherObj) * 24 - pitchCatalog[pitchType].controlDifficulty - fatigue * 48) / 100,
+    0.06,
+    0.9
+  );
+  const mistakeChance = clamp((fatigue - 0.58) * 1.18, 0, 0.52);
   const plannedStrike = Math.random() < controlChance;
+  const mistake = Math.random() < mistakeChance;
   const zone = FIELD.strike;
   let end;
-  if (plannedStrike) {
+  if (mistake) {
+    end = {
+      x: zone.x + randomInt(-15, 15),
+      y: zone.y + randomInt(-10, 10),
+    };
+    movement.x *= 0.35;
+    movement.y *= 0.35;
+  } else if (plannedStrike) {
     end = {
       x: clamp(zone.x + movement.x * 0.18 + randomInt(-24, 24), zone.x - zone.w / 2 + 10, zone.x + zone.w / 2 - 10),
       y: clamp(zone.y + movement.y * 0.12 + randomInt(-18, 18), zone.y - zone.h / 2 + 8, zone.y + zone.h / 2 - 8),
     };
   } else {
     const missSide = randomInt(0, 3);
-    const missX = randomInt(20, 74);
-    const missY = randomInt(16, 58);
+    const missX = randomInt(28, 96 + Math.round(fatigue * 46));
+    const missY = randomInt(22, 72 + Math.round(fatigue * 32));
     end = {
       x:
         missSide === 0
@@ -1184,8 +1258,9 @@ function startPitch(pitchType, mode) {
     start: { ...FIELD.mound },
     end,
     t: 0,
-    duration: clamp(0.86 - (speed - 118) / 148 + randomInt(-8, 8) / 100, 0.3, 0.76),
+    duration: clamp(0.68 - (speed - 122) / 185 + randomInt(-6, 6) / 100, 0.22, 0.58),
     inZone,
+    mistake,
     decisionMade: false,
     pitchType,
     speed,
@@ -1195,7 +1270,7 @@ function startPitch(pitchType, mode) {
   game.bat.contacted = false;
   game.isPitching = true;
   game.playPhase = mode === "batting" ? "공 날아옴" : "투구 중";
-  if (mode === "pitching") decreasePitcherStamina();
+  decreasePitcherStamina(pitcherObj);
 }
 
 function swingBat() {
@@ -1254,36 +1329,38 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
   const hasForceAtSecond = game.bases.first && game.outs < 2;
   const roll = Math.random();
   const sweet = contactQuality > 0.74 && timingDiff < 16 && contactScore > 82;
-  const weak = contactQuality < 0.45 || contactScore < 68 || timingDiff > 34;
+  const weak = contactQuality < 0.4 || contactScore < 62 || timingDiff > 38;
   const jammed = contact?.along < 0.38 || contactQuality < 0.36;
-  const under = contact?.along > 0.86 || (powerScore > 92 && contactQuality < 0.62);
+  const under = contact?.along > 0.88 || (powerScore > 96 && contactQuality < 0.58);
+  const launchBoost = (batter.launch - 60) / 120;
 
   if (game.buntMode) {
     if (batter.bunt + randomInt(-20, 25) > 70) return "번트안타";
-    return hasForceAtSecond && roll < 0.38 ? "병살타" : "땅볼아웃";
+    return hasForceAtSecond && roll < 0.28 ? "병살타" : "땅볼아웃";
   }
 
   if (contactQuality < 0.22) return "파울";
-  if (hasForceAtSecond && jammed && roll < 0.48) return "병살타";
-  if (jammed) return roll < 0.72 ? "땅볼아웃" : "파울";
-  if (under) return roll < 0.72 ? "플라이아웃" : "파울";
-  if (hasForceAtSecond && weak && roll < 0.42) return "병살타";
+  if (hasForceAtSecond && jammed && roll < 0.34) return "병살타";
+  if (jammed) return roll < 0.5 ? "땅볼아웃" : roll < 0.78 ? "파울" : "1루타";
+  if (under) return roll < 0.5 - launchBoost ? "플라이아웃" : roll < 0.72 ? "파울" : "1루타";
+  if (hasForceAtSecond && weak && roll < 0.28) return "병살타";
   if (weak) {
-    if (roll < 0.48) return "땅볼아웃";
-    if (roll < 0.84) return "플라이아웃";
+    if (roll < 0.34) return "땅볼아웃";
+    if (roll < 0.62) return "플라이아웃";
+    if (roll < 0.84) return "1루타";
     return "파울";
   }
 
   if (sweet && powerScore > 134 && roll < 0.62) return basesLoaded ? "만루홈런" : "홈런";
   if (sweet && powerScore > 116 && batter.speed > 72 && roll < 0.18) return "3루타";
-  if (sweet && powerScore > 102 && roll < 0.46) return "2루타";
+  if (sweet && powerScore > 102 && roll < 0.5) return "2루타";
 
-  if (hasForceAtSecond && contactScore < 80 && roll < 0.24) return "병살타";
-  if (contactQuality < 0.62 && roll < 0.46) return powerScore > 95 ? "플라이아웃" : "땅볼아웃";
-  if (powerScore > 126 && contactScore > 82 && roll < 0.16) return "홈런";
-  if (powerScore > 104 && contactScore > 76 && roll < 0.24) return "2루타";
+  if (hasForceAtSecond && contactScore < 76 && roll < 0.18) return "병살타";
+  if (contactQuality < 0.58 && roll < 0.28) return powerScore > 98 ? "플라이아웃" : "땅볼아웃";
+  if (powerScore > 126 && contactScore > 82 && roll < 0.18) return "홈런";
+  if (powerScore > 104 && contactScore > 76 && roll < 0.3) return "2루타";
   if (powerScore > 108 && batter.speed > 78 && roll < 0.10) return "3루타";
-  return roll < 0.52 ? "1루타" : powerScore > 92 ? "플라이아웃" : "땅볼아웃";
+  return roll < 0.66 ? "1루타" : roll < 0.84 ? "파울" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
 }
 
 function isSwingInContactWindow() {
@@ -1392,10 +1469,10 @@ function resolvePitchingResult(aiSwung) {
   const ball = game.ball;
   const batter = getAIBatter();
   const timingDiff = Math.abs(ball.t - game.aiSwingPoint) * 100;
-  const staminaPenalty = (100 - game.currentPitcher.stamina) * 0.42;
-  const pitchDifficulty = ball.speed * 0.18 + Math.abs(ball.movement.x) * 0.38 + game.currentPitcher.breaking * 0.28 - staminaPenalty;
-  const contactScore = batter.contact + randomInt(-18, 18) - pitchDifficulty * 0.42;
-  const powerScore = batter.power + randomInt(-15, 15) - pitchDifficulty * 0.22;
+  const fatigue = getFatigueLevel(game.currentPitcher);
+  const pitchDifficulty = ball.speed * 0.17 + Math.abs(ball.movement.x) * 0.34 + game.currentPitcher.breaking * 0.26 - fatigue * 34;
+  const contactScore = batter.contact + batter.eye * 0.18 + randomInt(-18, 18) - pitchDifficulty * 0.4;
+  const powerScore = batter.power + batter.launch * 0.12 + randomInt(-15, 15) - pitchDifficulty * 0.2;
   game.ball.active = false;
 
   if (timingDiff > 44 || contactScore < 42) {
@@ -1408,10 +1485,10 @@ function resolvePitchingResult(aiSwung) {
     return;
   }
   let result = "1루타";
-  if (powerScore > 125 && Math.random() < 0.28) result = "홈런";
-  else if (powerScore > 106 && Math.random() < 0.32) result = "2루타";
-  else if (game.bases.first && game.outs < 2 && contactScore < 76 && Math.random() < 0.36) result = "병살타";
-  else if (contactScore < 72 || Math.random() < 0.2) result = powerScore > 88 || Math.random() < 0.48 ? "플라이아웃" : "땅볼아웃";
+  if (powerScore > 126 && Math.random() < 0.25 + fatigue * 0.14) result = "홈런";
+  else if (powerScore > 106 && Math.random() < 0.34) result = "2루타";
+  else if (game.bases.first && game.outs < 2 && contactScore < 72 && Math.random() < 0.24) result = "병살타";
+  else if (contactScore < 64 || Math.random() < 0.14) result = powerScore > 92 || Math.random() < 0.45 ? "플라이아웃" : "땅볼아웃";
   applyHitResult(result);
 }
 
@@ -1433,6 +1510,11 @@ function applyHitResult(result) {
   const isOffense = game.half === "top";
   const label = isOffense ? result : result.includes("아웃") || result === "병살타" ? result : `${result} 허용`;
 
+  if (result === "파울") {
+    addStrike("파울!", true);
+    startHitAnimation("파울", 160, "#f7f7f7");
+    return;
+  }
   if (result === "땅볼아웃" || result === "플라이아웃") {
     startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && Math.random() < 0.35) {
@@ -1571,34 +1653,66 @@ function chooseAIPitch() {
 
 function chooseAISwing() {
   const batter = getAIBatter();
-  const zoneBias = game.ball.inZone ? 0.38 : -0.22;
+  const zoneBias = game.ball.inZone ? 0.34 : -0.26;
   const countBias = game.strikes >= 2 ? 0.18 : game.balls >= 3 ? -0.08 : 0;
-  const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 100 + Math.abs(game.pitchMovement.x) / 180;
-  const chance = clamp(0.32 + batter.contact / 250 + zoneBias + countBias - difficulty, 0.08, 0.88);
+  const fatigue = getFatigueLevel(game.currentPitcher);
+  const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 100 + Math.abs(game.pitchMovement.x) / 170 - fatigue * 0.22;
+  const chance = clamp(0.27 + batter.contact / 260 + batter.eye / 420 + zoneBias + countBias - difficulty, 0.06, 0.9);
   return Math.random() < chance;
 }
 
 function calculatePitchSpeed(pitcherObj, pitchType) {
-  const staminaPenalty = Math.max(0, 55 - pitcherObj.stamina) * 0.16;
-  const raw = 128 + pitcherObj.velocity * 0.42 + pitchCatalog[pitchType].speedModifier - staminaPenalty + randomInt(-9, 9);
-  return Math.round(clamp(raw, 108, 170));
+  const fatigue = getFatigueLevel(pitcherObj);
+  const staminaPenalty = fatigue * fatigue * 18;
+  const raw = 132 + pitcherObj.velocity * 0.45 + pitchCatalog[pitchType].speedModifier + pitcherObj.stuff * 0.08 - staminaPenalty + randomInt(-pitcherObj.speedVariance, pitcherObj.speedVariance);
+  return Math.round(clamp(raw, 108, 174));
 }
 
 function calculatePitchMovement(pitcherObj, pitchType, batterObj) {
   const base = pitchCatalog[pitchType].movement;
-  const pitcherBoost = pitcherObj.breaking / 100;
-  const batterRead = batterObj.contact / 260;
+  const fatigue = getFatigueLevel(pitcherObj);
+  const pitcherBoost = pitcherObj.breaking / 100 - fatigue * 0.28;
+  const batterRead = batterObj.contact / 280 + batterObj.eye / 520;
   return {
-    x: base.x * (0.75 + pitcherBoost) - batterRead * 8 + randomInt(-5, 5),
-    y: base.y * (0.72 + pitcherBoost) + randomInt(-4, 4),
+    x: base.x * (0.78 + pitcherBoost) - batterRead * 7 + randomInt(-6, 6),
+    y: base.y * (0.74 + pitcherBoost) + randomInt(-5, 5),
   };
 }
 
-function decreasePitcherStamina() {
-  if (!game.currentPitcher) return;
-  game.currentPitcher.stamina = clamp(game.currentPitcher.stamina - randomInt(3, 6), 0, game.currentPitcher.maxStamina);
-  game.stamina = game.currentPitcher.stamina;
-  if (game.currentPitcher.stamina <= 24) game.warning = "투수 교체 필요!";
+function decreasePitcherStamina(pitcherObj = game.currentPitcher) {
+  if (!pitcherObj) return;
+  const cost = (Math.random() < 0.18 ? 2 : 1) * pitcherObj.fatigueRate;
+  pitcherObj.stamina = clamp(pitcherObj.stamina - cost, 0, pitcherObj.maxStamina);
+  if (pitcherObj === game.currentPitcher) {
+    game.stamina = pitcherObj.stamina;
+    if (getStaminaPercent(pitcherObj) <= 0.18) game.warning = "투수 교체 필요!";
+  }
+}
+
+function getStaminaPercent(pitcherObj) {
+  if (!pitcherObj?.maxStamina) return 0;
+  return clamp(pitcherObj.stamina / pitcherObj.maxStamina, 0, 1);
+}
+
+function getFatigueLevel(pitcherObj) {
+  return 1 - getStaminaPercent(pitcherObj);
+}
+
+function chooseFatiguedPitch(pitcherObj, pitchType) {
+  if (!pitcherObj.pitches.includes(pitchType)) pitchType = pitcherObj.pitches[0];
+  const fatigue = getFatigueLevel(pitcherObj);
+  const hasFastball = pitcherObj.pitches.includes("직구");
+  if (pitcherObj.stamina <= 0 && hasFastball) return "직구";
+  if (fatigue > 0.86 && hasFastball && Math.random() < 0.62) return "직구";
+  if (fatigue > 0.72 && pitchCatalog[pitchType].controlDifficulty > 17 && hasFastball && Math.random() < 0.35) return "직구";
+  return pitchType;
+}
+
+function autoChangeAIPitcher() {
+  const next = game.aiTeam.bullpen.find((p) => p.stamina > 0 && p.name !== game.aiPitcher?.name) || game.aiTeam.bullpen[0];
+  if (!next) return;
+  game.aiPitcher = clonePitcher(next);
+  game.resultText = `${game.aiTeam.name} 투수 교체`;
 }
 
 function changePitcher(newPitcher) {
@@ -2173,7 +2287,7 @@ function loadSavedPitcher() {
 }
 
 function clonePitcher(p) {
-  return { ...p, pitches: [...p.pitches] };
+  return { ...p, pitches: [...p.pitches], stamina: p.maxStamina };
 }
 
 function selectOpponentStarter() {
