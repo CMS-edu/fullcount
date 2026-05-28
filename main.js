@@ -16,7 +16,7 @@ const FIELD = {
   plate: { x: 480, y: 492 },
   catcher: { x: 480, y: 522 },
   batter: { x: 535, y: 478 },
-  strike: { x: 480, y: 474, w: 126, h: 62 },
+  strike: { x: 480, y: 438, w: 138, h: 62 },
   fielders: {
     p: { x: 480, y: 326 },
     c: { x: 480, y: 522 },
@@ -955,14 +955,14 @@ function drawStrikeZoneGuide() {
   ctx.strokeStyle = "#050505";
   ctx.lineWidth = 13;
   ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2 - 8, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2 + 8, zone.y);
+  ctx.moveTo(zone.x - zone.w / 2 - 14, zone.y);
+  ctx.lineTo(zone.x + zone.w / 2 + 14, zone.y);
   ctx.stroke();
   ctx.strokeStyle = "#d71920";
   ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2 - 8, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2 + 8, zone.y);
+  ctx.moveTo(zone.x - zone.w / 2 - 14, zone.y);
+  ctx.lineTo(zone.x + zone.w / 2 + 14, zone.y);
   ctx.stroke();
   ctx.restore();
 }
@@ -1468,7 +1468,7 @@ function projectPointToSegment(point, start, end) {
 
 function isPointInStrikeZone(point) {
   const zone = FIELD.strike;
-  const withinLineWidth = point.x >= zone.x - zone.w / 2 - 8 && point.x <= zone.x + zone.w / 2 + 8;
+  const withinLineWidth = point.x >= zone.x - zone.w / 2 - 14 && point.x <= zone.x + zone.w / 2 + 14;
   return withinLineWidth && Math.abs(point.y - zone.y) <= 10;
 }
 
