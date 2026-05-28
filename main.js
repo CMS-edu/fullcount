@@ -137,11 +137,24 @@ const aiTeams = [
 
 const defaultLineupNames = ["박찬호", "김선빈", "김도영", "최형우", "나성범", "위즈덤", "이우성", "김태군", "최원준"];
 
+const teamVisuals = {
+  "KIA 타이거즈": { shortName: "KIA", color: "#d71920", secondaryColor: "#111111", textColor: "#ffffff", logo: "assets/team-logos/kia-tigers.png", fallbackLogo: "assets/HT.png" },
+  삼성: { shortName: "삼성", color: "#1d62ad", secondaryColor: "#ffffff", textColor: "#ffffff", logo: "assets/team-logos/samsung-lions.png", fallbackLogo: "assets/SS.png" },
+  LG: { shortName: "LG", color: "#c3042f", secondaryColor: "#111111", textColor: "#ffffff", logo: "assets/team-logos/lg-twins.png", fallbackLogo: "assets/LG.png" },
+  한화: { shortName: "한화", color: "#f37321", secondaryColor: "#111111", textColor: "#111111", logo: "assets/team-logos/hanwha-eagles.png", fallbackLogo: "assets/HH.png" },
+  두산: { shortName: "두산", color: "#111111", secondaryColor: "#f2f2f2", textColor: "#ffffff", logo: "assets/team-logos/doosan-bears.png", fallbackLogo: "assets/OB.png" },
+  롯데: { shortName: "롯데", color: "#002955", secondaryColor: "#d71920", textColor: "#ffffff", logo: "assets/team-logos/lotte-giants.png", fallbackLogo: "assets/LT.png" },
+  키움: { shortName: "키움", color: "#862633", secondaryColor: "#b6a269", textColor: "#ffffff", logo: "assets/team-logos/kiwoom-heroes.png", fallbackLogo: "assets/WO.png" },
+  KT: { shortName: "KT", color: "#111111", secondaryColor: "#e31837", textColor: "#ffffff", logo: "assets/team-logos/kt-wiz.png", fallbackLogo: "assets/KT.png" },
+  SSG: { shortName: "SSG", color: "#cf0a2c", secondaryColor: "#f4c24d", textColor: "#ffffff", logo: "assets/team-logos/ssg-landers.png", fallbackLogo: "assets/SK.png" },
+  NC: { shortName: "NC", color: "#1f5aa6", secondaryColor: "#c8aa76", textColor: "#ffffff", logo: "assets/team-logos/nc-dinos.png", fallbackLogo: "assets/NC.png" },
+};
+
 const playableTeams = [
   {
     key: "kia",
     ...kiaClub,
-    color: kiaClub.colors.main,
+    ...teamVisuals["KIA 타이거즈"],
     batters: kiaBatters,
     starters,
     bullpen: Object.values(bullpenGroups).flat(),
@@ -151,6 +164,7 @@ const playableTeams = [
   ...aiTeams.map((team) => ({
     key: team.name,
     ...team,
+    ...teamVisuals[team.name],
     season: "2026 게임 데이터",
     notes: [`${team.name} 게임용 9인 타순과 투수진`, "첫 화면에서 선택하면 이 팀으로 직접 플레이할 수 있습니다."],
     bullpenGroups: makeOpponentBullpenGroups(team.bullpen),
@@ -211,6 +225,7 @@ const game = {
 };
 
 let lastTime = 0;
+const logoImages = new Map();
 
 function batter(name, position, bats, contact, power, speed, bunt, nickname, note) {
   const seed = nameSeed(name);
@@ -355,6 +370,53 @@ function createFielders() {
   }));
 }
 
+function preloadTeamLogos() {
+  playableTeams.forEach((team) => getTeamLogoRecord(team));
+}
+
+function getTeamLogoRecord(team) {
+  const sources = getTeamLogoSources(team);
+  if (!sources.length || typeof Image === "undefined") return null;
+  const cacheKey = sources.join("|");
+  if (!logoImages.has(cacheKey)) {
+    const record = { img: new Image(), loaded: false, failed: false, sourceIndex: 0, sources };
+    record.img.onload = () => {
+      record.loaded = true;
+    };
+    record.img.onerror = () => {
+      record.sourceIndex += 1;
+      if (record.sourceIndex < record.sources.length) {
+        record.img.src = record.sources[record.sourceIndex];
+        return;
+      }
+      record.failed = true;
+    };
+    record.img.src = sources[0];
+    logoImages.set(cacheKey, record);
+  }
+  return logoImages.get(cacheKey);
+}
+
+function getTeamLogoImage(team) {
+  const record = getTeamLogoRecord(team);
+  return record?.loaded && !record.failed ? record.img : null;
+}
+
+function getTeamLogoSources(team) {
+  return [team?.logo, team?.fallbackLogo].filter(Boolean);
+}
+
+function teamLogoMarkup(team, extraClass = "") {
+  const style = `--team-color:${team.color || "#d71920"};--team-secondary:${team.secondaryColor || "#111111"};--team-text:${team.textColor || "#ffffff"}`;
+  const fallback = team.fallbackLogo ? `this.onerror=function(){this.style.display='none'};this.src='${team.fallbackLogo}'` : "this.style.display='none'";
+  return `
+    <span class="team-logo ${extraClass}" style="${style}">
+      <span class="team-logo-fallback">${team.shortName || team.name}</span>
+      <img src="${team.logo}" alt="${team.name} 로고" loading="lazy" onerror="${fallback}" />
+    </span>
+  `;
+}
+
 function currentUserTeam() {
   if (!game.userTeam) game.userTeam = loadSavedTeam();
   return game.userTeam;
@@ -405,6 +467,7 @@ function pitcherStorageKey(team = currentUserTeam()) {
 
 function init() {
   loadRecord();
+  preloadTeamLogos();
   setupTeams();
   resetGame(false);
   bindInput();
@@ -666,10 +729,13 @@ function draw() {
 }
 
 function drawMenuBackdrop() {
+  const team = currentUserTeam();
   ctx.fillStyle = "#171717";
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#d71920";
+  ctx.fillStyle = team.color || "#d71920";
   ctx.fillRect(0, 0, W, 72);
+  ctx.fillStyle = team.secondaryColor || "#111111";
+  ctx.fillRect(0, 72, W, 8);
   ctx.fillStyle = "#2f7d49";
   ctx.fillRect(0, 360, W, 180);
   ctx.fillStyle = "#c98242";
@@ -695,6 +761,64 @@ function drawMenuBackdrop() {
   ctx.strokeStyle = "#050505";
   ctx.lineWidth = 4;
   ctx.strokeRect(300, 218, 360, 14);
+  drawTeamLogo(team, 40, 18, 46);
+  if (game.aiTeam) drawTeamLogo(game.aiTeam, 874, 18, 46);
+}
+
+function drawTeamLogo(team, x, y, size, options = {}) {
+  if (!team) return;
+  const img = getTeamLogoImage(team);
+  ctx.save();
+  ctx.globalAlpha = options.alpha ?? 1;
+  if (options.shadow !== false) {
+    ctx.fillStyle = "rgba(0,0,0,0.36)";
+    ctx.beginPath();
+    ctx.ellipse(x + size / 2, y + size + 4, size * 0.42, size * 0.12, 0, 0, TWO_PI);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, TWO_PI);
+  ctx.clip();
+  if (img) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x, y, size, size);
+    ctx.drawImage(img, x, y, size, size);
+  } else {
+    drawTeamBadge(team, x, y, size);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = options.alpha ?? 1;
+  ctx.strokeStyle = options.stroke || "#ffffff";
+  ctx.lineWidth = Math.max(2, size / 14);
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2 - 1, 0, TWO_PI);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTeamBadge(team, x, y, size) {
+  const main = team.color || "#d71920";
+  const sub = team.secondaryColor || "#111111";
+  ctx.fillStyle = main;
+  ctx.fillRect(x, y, size, size);
+  ctx.fillStyle = sub;
+  ctx.beginPath();
+  ctx.moveTo(x, y + size);
+  ctx.lineTo(x + size, y);
+  ctx.lineTo(x + size, y + size);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = team.textColor || "#ffffff";
+  ctx.font = `900 ${Math.max(12, Math.floor(size * 0.28))}px Segoe UI`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(team.shortName || team.name, x + size / 2, y + size / 2);
+}
+
+function drawTeamWatermark(team, x, y, size) {
+  drawTeamLogo(team, x, y, size, { alpha: 0.16, shadow: false, stroke: "rgba(255,255,255,0.75)" });
 }
 
 function drawField() {
@@ -717,6 +841,8 @@ function drawField() {
   ctx.quadraticCurveTo(480, 124, 98, 230);
   ctx.closePath();
   ctx.fill();
+  drawTeamWatermark(currentUserTeam(), 144, 118, 82);
+  if (game.aiTeam) drawTeamWatermark(game.aiTeam, 734, 118, 82);
 
   ctx.strokeStyle = "rgba(168,92,42,0.76)";
   ctx.lineWidth = 20;
@@ -784,18 +910,24 @@ function drawField() {
 }
 
 function drawScoreboard() {
+  const userTeam = currentUserTeam();
+  const opponent = game.aiTeam;
   ctx.save();
   ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, W, 76);
-  ctx.fillStyle = currentUserTeam().color || "#d71920";
+  ctx.fillStyle = userTeam.color || "#d71920";
   ctx.fillRect(0, 0, W, 10);
+  ctx.fillStyle = opponent?.color || "#27405f";
+  ctx.fillRect(W / 2, 0, W / 2, 10);
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 74, W, 3);
 
+  drawTeamLogo(userTeam, 18, 16, 44, { shadow: false });
+  if (opponent) drawTeamLogo(opponent, 554, 16, 44, { shadow: false });
   ctx.fillStyle = "#fff";
   ctx.font = "900 29px Segoe UI";
   ctx.textAlign = "left";
-  ctx.fillText(`${currentUserTeam().name} ${game.userScore} - ${game.aiScore} ${game.aiTeam.name}`, 22, 38);
+  ctx.fillText(`${userTeam.shortName || userTeam.name} ${game.userScore} - ${game.aiScore} ${opponent?.shortName || opponent?.name || "AI"}`, 72, 38);
   ctx.fillStyle = "#f4c24d";
   ctx.font = "900 16px Segoe UI";
   ctx.fillText(`${game.inning}회 ${game.half === "top" ? "초" : "말"} · ${game.playPhase}`, 24, 64);
@@ -816,11 +948,17 @@ function drawScoreboard() {
 function drawGameHUD() {
   const batter = game.currentBatter;
   const pitcherObj = game.half === "top" ? game.aiPitcher : game.currentPitcher;
+  const offenseTeam = game.half === "top" ? currentUserTeam() : game.aiTeam;
+  const moundTeam = game.half === "top" ? game.aiTeam : currentUserTeam();
   ctx.save();
   ctx.fillStyle = "#050505";
   ctx.fillRect(16, 84, 928, 50);
+  ctx.fillStyle = offenseTeam?.color || "#d71920";
+  ctx.fillRect(16, 84, 314, 5);
   ctx.fillStyle = "#d71920";
-  ctx.fillRect(16, 84, 928, 5);
+  ctx.fillRect(330, 84, 300, 5);
+  ctx.fillStyle = moundTeam?.color || "#27405f";
+  ctx.fillRect(630, 84, 314, 5);
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 3;
   ctx.strokeRect(16, 84, 928, 50);
@@ -838,6 +976,7 @@ function drawGameHUD() {
   ctx.fillStyle = "#f4c24d";
   ctx.font = "900 12px Segoe UI";
   ctx.fillText(game.half === "top" ? "공격" : "수비", 34, 100);
+  drawTeamLogo(offenseTeam, 104, 93, 31, { shadow: false });
   ctx.fillStyle = "#fff";
   ctx.font = "900 20px Segoe UI";
   ctx.fillText(batter?.name || "-", 34, 120);
@@ -857,6 +996,7 @@ function drawGameHUD() {
   ctx.fillStyle = "#f4c24d";
   ctx.font = "900 12px Segoe UI";
   ctx.fillText("마운드", 926, 100);
+  drawTeamLogo(moundTeam, 650, 93, 31, { shadow: false });
   ctx.fillStyle = "#fff";
   ctx.font = "900 20px Segoe UI";
   ctx.fillText(pitcherObj?.name || "-", 926, 120);
@@ -974,6 +1114,7 @@ function drawCatcher() {
 
 function drawBatter(isAi = false) {
   const b = FIELD.batter;
+  const team = isAi ? game.aiTeam : currentUserTeam();
   ctx.save();
   ctx.translate(b.x, b.y);
   ctx.rotate(isAi ? Math.PI * 1.05 : Math.PI * 0.72);
@@ -981,7 +1122,7 @@ function drawBatter(isAi = false) {
   ctx.beginPath();
   ctx.arc(0, -14, 6, 0, TWO_PI);
   ctx.fill();
-  ctx.fillStyle = isAi ? "#27405f" : "#d71920";
+  ctx.fillStyle = team?.color || (isAi ? "#27405f" : "#d71920");
   ctx.beginPath();
   ctx.arc(0, 0, 11, 0, TWO_PI);
   ctx.fill();
@@ -1119,7 +1260,7 @@ function drawRunnerAnimations() {
 function drawRunnerIcon(x, y, runner, moving) {
   ctx.save();
   ctx.translate(x, y);
-  const color = game.half === "top" ? "#d71920" : game.aiTeam.color || "#27405f";
+  const color = game.half === "top" ? currentUserTeam().color || "#d71920" : game.aiTeam.color || "#27405f";
   ctx.fillStyle = "rgba(0,0,0,0.22)";
   ctx.beginPath();
   ctx.ellipse(0, 11, moving ? 12 : 10, 4, 0, 0, TWO_PI);
@@ -1703,17 +1844,37 @@ function resolvePitchingResult(aiSwung) {
     addStrike("AI 헛스윙!");
     return;
   }
-  if (contactScore < 57 || Math.random() < 0.22) {
+  if (contactScore < 57 || Math.random() < 0.26) {
     addStrike("파울!", true);
     startHitAnimation("파울", 150, "#f7f7f7");
     return;
   }
-  let result = "1루타";
-  if (powerScore > 126 && Math.random() < 0.25 + fatigue * 0.14) result = "홈런";
-  else if (powerScore > 106 && Math.random() < 0.34) result = "2루타";
-  else if (game.bases.first && game.outs < 2 && contactScore < 72 && Math.random() < 0.24) result = "병살타";
-  else if (contactScore < 64 || Math.random() < 0.14) result = powerScore > 92 || Math.random() < 0.45 ? "플라이아웃" : "땅볼아웃";
+  const result = chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff, fatigue });
   applyHitResult(result);
+}
+
+function chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff, fatigue }) {
+  const roll = Math.random();
+  const forceAtSecond = game.bases.first && game.outs < 2;
+  const solidContact = contactScore > 78 && timingDiff < 20;
+  const weakContact = contactScore < 66 || timingDiff > 34;
+
+  if (forceAtSecond && weakContact && roll < 0.34) return "병살타";
+  if (weakContact) {
+    if (roll < 0.42) return "땅볼아웃";
+    if (roll < 0.74) return "플라이아웃";
+    if (roll < 0.88) return "파울";
+    return "1루타";
+  }
+
+  if (powerScore > 130 && solidContact && roll < 0.18 + fatigue * 0.08) return "홈런";
+  if (powerScore > 112 && solidContact && roll < 0.28) return batter.speed > 78 && roll < 0.08 ? "3루타" : "2루타";
+  if (forceAtSecond && contactScore < 74 && roll < 0.18) return "병살타";
+  if (roll < 0.34) return "땅볼아웃";
+  if (roll < 0.58) return "플라이아웃";
+  if (roll < 0.84) return "1루타";
+  if (roll < 0.94) return "2루타";
+  return powerScore > 118 ? "홈런" : "파울";
 }
 
 function resolveTakenPitch(mode) {
@@ -1742,8 +1903,11 @@ function applyHitResult(result) {
   }
   if (result === "땅볼아웃" || result === "플라이아웃") {
     startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
+    if (result === "땅볼아웃") animateRunner(runner, "home", "first");
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && Math.random() < 0.35) {
+      const thirdRunner = game.bases.third;
       game.bases.third = null;
+      animateRunner(thirdRunner, "third", "home");
       scoreRun(1);
       recordOut(1, "희생플라이!");
       return;
@@ -1753,17 +1917,20 @@ function applyHitResult(result) {
   }
   if (result === "병살타") {
     startHitAnimation("병살타", 140, "#e6d0a5");
+    if (game.bases.first) animateRunner(game.bases.first, "first", "second");
+    animateRunner(runner, "home", "first");
     if (game.bases.first) game.bases.first = null;
     recordOut(Math.min(2, 3 - game.outs), "병살타!");
     return;
   }
   const bases = result === "2루타" ? 2 : result === "3루타" ? 3 : result === "홈런" || result === "만루홈런" ? 4 : 1;
-  startHitAnimation(result, bases === 4 ? 520 : 190 + bases * 80, bases === 4 ? "#ffd34d" : "#fff");
-  advanceRunners(bases, runner);
-  finishPlateAppearance(`${label}!`);
+  const battedBall = startHitAnimation(result, bases === 4 ? 520 : 190 + bases * 80, bases === 4 ? "#ffd34d" : "#fff");
+  const play = advanceRunners(bases, runner, battedBall, result);
+  const suffix = play.outs ? ` · ${play.outBaseLabel} 송구 아웃!` : "!";
+  finishPlateAppearance(`${label}${suffix}`);
 }
 
-function advanceRunners(basesToAdvance, batterRunner) {
+function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall, result = "1루타") {
   if (basesToAdvance >= 4) {
     let runs = 1;
     for (const key of ["first", "second", "third"]) {
@@ -1775,47 +1942,157 @@ function advanceRunners(basesToAdvance, batterRunner) {
     }
     animateRunner(batterRunner, "home", "home");
     scoreRun(runs);
-    return;
+    return { runs, outs: 0, outBaseLabel: "" };
   }
-  const order = [
-    ["third", 3],
-    ["second", 2],
-    ["first", 1],
-  ];
+
+  const plans = buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result);
+  const outPlan = chooseThrowOutPlan(plans, battedBall, result);
+  if (outPlan) outPlan.out = true;
+
   const next = { first: null, second: null, third: null };
   let runs = 0;
-  for (const [key, baseNo] of order) {
-    const runner = game.bases[key];
-    if (!runner) continue;
-    const target = baseNo + basesToAdvance;
-    if (target >= 4) {
-      runs += 1;
-      animateRunner(runner, key, "home");
-    } else if (target === 3) {
-      next.third = runner;
-      animateRunner(runner, key, "third");
-    } else if (target === 2) {
-      next.second = runner;
-      animateRunner(runner, key, "second");
-    } else {
-      next.first = runner;
-      animateRunner(runner, key, "first");
+  let outs = 0;
+  for (const plan of plans) {
+    animateRunner(plan.runner, plan.fromBase, plan.toBase);
+    if (plan.out && game.outs + outs < 3) {
+      outs += 1;
+      continue;
     }
+    if (plan.toNo >= 4) runs += 1;
+    else next[plan.toBase] = plan.runner;
   }
-  if (basesToAdvance === 3) {
-    next.third = batterRunner;
-    animateRunner(batterRunner, "home", "third");
-  }
-  if (basesToAdvance === 2) {
-    next.second = batterRunner;
-    animateRunner(batterRunner, "home", "second");
-  }
-  if (basesToAdvance === 1) {
-    next.first = batterRunner;
-    animateRunner(batterRunner, "home", "first");
-  }
+
   game.bases = next;
   scoreRun(runs);
+  if (outs) game.outs = clamp(game.outs + outs, 0, 3);
+  return {
+    runs,
+    outs,
+    outBaseLabel: outPlan ? baseDisplayName(outPlan.toBase) : "",
+  };
+}
+
+function buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result) {
+  const plans = [];
+  const existing = [
+    { fromBase: "third", fromNo: 3, runner: game.bases.third },
+    { fromBase: "second", fromNo: 2, runner: game.bases.second },
+    { fromBase: "first", fromNo: 1, runner: game.bases.first },
+  ];
+
+  for (const item of existing) {
+    if (!item.runner) continue;
+    let toNo = item.fromNo + basesToAdvance;
+    if (basesToAdvance === 1 && item.fromBase === "second" && shouldTryExtraBase(item.runner, "home", battedBall, result)) toNo = 4;
+    if (basesToAdvance === 1 && item.fromBase === "first" && shouldTryExtraBase(item.runner, "third", battedBall, result)) toNo = 3;
+    if (basesToAdvance === 2 && item.fromBase === "first" && shouldTryExtraBase(item.runner, "home", battedBall, result)) toNo = 4;
+    plans.push(makeRunnerPlan(item.runner, item.fromBase, baseNameFromNumber(toNo), item.fromNo, toNo));
+  }
+
+  plans.push(makeRunnerPlan(batterRunner, "home", baseNameFromNumber(basesToAdvance), 0, basesToAdvance, true));
+  return plans;
+}
+
+function makeRunnerPlan(runner, fromBase, toBase, fromNo, toNo, isBatter = false) {
+  return {
+    runner,
+    fromBase,
+    toBase,
+    fromNo,
+    toNo,
+    isBatter,
+    runnerTime: runnerTravelTime(runner, fromBase, toBase, isBatter),
+    out: false,
+  };
+}
+
+function shouldTryExtraBase(runner, targetBase, battedBall, result) {
+  const speed = runner?.speed || 60;
+  const target = battedBall?.end || FIELD.second;
+  const deepBall = target.y < 235 || Math.abs(target.x - FIELD.plate.x) > 250;
+  const cleanGap = result === "2루타" || target.y < 210;
+  const chance =
+    targetBase === "home"
+      ? clamp(0.16 + speed / 260 + (deepBall ? 0.18 : 0) + (cleanGap ? 0.16 : 0), 0.12, 0.82)
+      : clamp(0.18 + speed / 300 + (deepBall ? 0.14 : 0), 0.1, 0.7);
+  return Math.random() < chance;
+}
+
+function chooseThrowOutPlan(plans, battedBall, result) {
+  if (!battedBall || result.includes("홈런")) return null;
+  const defense = estimateDefenseTiming(battedBall, result);
+  const throwCandidates = plans
+    .map((plan) => {
+      const basePoint = getRunnerBasePoint(plan.toBase);
+      const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
+      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 430 : 560;
+      const throwArrival = defense.fieldTime + throwDistance / throwSpeed + 0.2 + Math.random() * 0.08;
+      const beatBy = plan.runnerTime - throwArrival;
+      const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
+      return { plan, beatBy, value };
+    })
+    .filter(({ plan, beatBy }) => {
+      if (plan.toNo >= 4) return beatBy > 0.03;
+      if (plan.isBatter && plan.toBase === "first") return beatBy > 0.11 && result === "1루타";
+      return beatBy > 0.08;
+    })
+    .sort((a, b) => b.value - a.value || b.beatBy - a.beatBy);
+  return throwCandidates[0]?.plan || null;
+}
+
+function estimateDefenseTiming(battedBall, result) {
+  const target = battedBall.end || FIELD.second;
+  const candidates =
+    target.y < 250 || result === "플라이아웃"
+      ? game.fielders.filter((f) => ["LF", "CF", "RF", "SS", "2B"].includes(f.label))
+      : game.fielders.filter((f) => ["1B", "2B", "SS", "3B", "p"].includes(f.label));
+  const fielder = nearestFielder(candidates, target) || game.fielders[0];
+  const fielderDistance = Math.hypot((fielder?.homeX || fielder?.x || FIELD.mound.x) - target.x, (fielder?.homeY || fielder?.y || FIELD.mound.y) - target.y);
+  const ballTime = (battedBall.duration || 1) * (target.y < 250 ? 0.9 : 0.68);
+  const fielderTime = (battedBall.reactionDelay || 0.1) + fielderDistance / ((fielder?.speed || 170) + 35);
+  return {
+    fielder,
+    fieldPoint: target,
+    fieldTime: Math.max(ballTime, fielderTime) + 0.18 + Math.random() * 0.12,
+  };
+}
+
+function runnerTravelTime(runner, fromBase, toBase, isBatter = false) {
+  const fromNo = baseNumber(fromBase);
+  const toNo = baseNumber(toBase);
+  const speed = clamp(runner?.speed || 60, 30, 99);
+  const runnerSpeed = 168 + speed * 1.75;
+  let distance = 0;
+  for (let base = fromNo; base < toNo; base += 1) {
+    const a = getRunnerBasePoint(baseNameFromNumber(base));
+    const b = getRunnerBasePoint(baseNameFromNumber(base + 1));
+    distance += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  const turns = Math.max(0, toNo - fromNo - 1);
+  return distance / runnerSpeed + turns * 0.11 + (isBatter ? 0.1 : -0.04) + randomInt(-6, 8) / 100;
+}
+
+function baseNumber(base) {
+  if (base === "first") return 1;
+  if (base === "second") return 2;
+  if (base === "third") return 3;
+  if (base === "home") return 4;
+  return 0;
+}
+
+function baseNameFromNumber(number) {
+  if (number <= 0) return "home";
+  if (number === 1) return "first";
+  if (number === 2) return "second";
+  if (number === 3) return "third";
+  return "home";
+}
+
+function baseDisplayName(base) {
+  if (base === "first") return "1루";
+  if (base === "second") return "2루";
+  if (base === "third") return "3루";
+  return "홈";
 }
 
 function walkBatter() {
@@ -2127,6 +2404,7 @@ function startHitAnimation(result, distance, color) {
     reactionDelay: isHomer ? 0.18 + Math.random() * 0.14 : 0.08 + Math.random() * 0.22,
     fielderSent: false,
   };
+  return game.hitBall;
 }
 
 function chooseFieldingTarget(result, distance) {
@@ -2440,6 +2718,11 @@ function renderScreenPanel() {
     return `
       <div class="screen-panel intro-panel">
         <h1>경기 종료</h1>
+        <div class="versus-logos">
+          ${teamLogoMarkup(currentUserTeam(), "title-logo")}
+          <strong>VS</strong>
+          ${teamLogoMarkup(game.aiTeam, "title-logo")}
+        </div>
         <p>${currentUserTeam().name} ${game.userScore} - ${game.aiScore} ${game.aiTeam.name}</p>
         <p class="muted">최고 득점 ${game.record.bestScore}</p>
         <div class="panel-actions" style="justify-content:center">
@@ -2460,7 +2743,10 @@ function renderIntro() {
           <h1>풀카운트</h1>
           <p>플레이할 팀을 고르고 타순과 선발투수를 직접 정하세요.</p>
         </div>
-        <strong>${selected.name}</strong>
+        <div class="title-team">
+          ${teamLogoMarkup(selected, "title-logo")}
+          <strong>${selected.name}</strong>
+        </div>
       </div>
       <div class="grid team-grid">
         ${playableTeams
@@ -2469,7 +2755,10 @@ function renderIntro() {
             return `
               <button class="player-card team-card ${isSelected ? "selected" : ""}" data-action="selectTeam" data-team="${team.name}" style="--team-color:${team.color || "#d71920"}">
                 <span class="team-stripe"></span>
-                <strong>${team.name}</strong>
+                <span class="team-card-head">
+                  ${teamLogoMarkup(team)}
+                  <strong>${team.name}</strong>
+                </span>
                 <span class="muted">감독 ${team.manager} · 홈 ${team.stadium}</span>
                 <span class="stats">
                   <span class="pill">타자 ${team.batters.length}</span>
@@ -2494,7 +2783,7 @@ function renderLineupSelect() {
     <div class="screen-panel">
       <div class="screen-title">
         <div>
-          <h2>2026 ${team.name} 타순 선택</h2>
+          <h2><span class="heading-logo">${teamLogoMarkup(team, "tiny-logo")}</span>2026 ${team.name} 타순 선택</h2>
           <p>감독 ${team.manager} · 홈 ${team.stadium} · 9명을 순서대로 선택하세요.</p>
         </div>
         <strong>${game.selectedLineup.length}/9</strong>
@@ -2538,15 +2827,15 @@ function renderPitcherSelect() {
     <div class="screen-panel">
       <div class="screen-title">
         <div>
-          <h2>${team.name} 선발투수 선택</h2>
-          <p>상대: ${game.aiTeam.name} · 감독 ${game.aiTeam.manager} · 선발 ${game.aiPitcher?.name || "-"} 예상</p>
+          <h2><span class="heading-logo">${teamLogoMarkup(team, "tiny-logo")}</span>${team.name} 선발투수 선택</h2>
+          <p>상대: ${teamLogoMarkup(game.aiTeam, "inline-logo")} ${game.aiTeam.name} · 감독 ${game.aiTeam.manager} · 선발 ${game.aiPitcher?.name || "-"} 예상</p>
         </div>
       </div>
       <div class="grid pitcher-grid">
         ${team.starters.map((p) => renderPitcherCard(p, "selectPitcher", "pitcher")).join("")}
       </div>
       <section class="bullpen-group">
-        <h3>상대 ${game.aiTeam.name} 정보</h3>
+        <h3>${teamLogoMarkup(game.aiTeam, "inline-logo")} 상대 ${game.aiTeam.name} 정보</h3>
         <div class="selected-lineup">
           ${game.aiTeam.batters.map((b, i) => `<span class="lineup-chip">${i + 1}. ${b.name}</span>`).join("")}
         </div>
@@ -2563,7 +2852,7 @@ function renderBullpen() {
       <div class="screen-title">
         <div>
           <h2>투수 교체</h2>
-          <p>현재 투수: ${game.currentPitcher.name} · 체력 ${Math.round(game.currentPitcher.stamina)}</p>
+          <p>${teamLogoMarkup(currentUserTeam(), "inline-logo")} 현재 투수: ${game.currentPitcher.name} · 체력 ${Math.round(game.currentPitcher.stamina)}</p>
         </div>
         <button data-action="backPitching">돌아가기</button>
       </div>

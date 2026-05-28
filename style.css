@@ -150,6 +150,29 @@ canvas {
   margin-bottom: 14px;
 }
 
+.title-team,
+.team-card-head,
+.versus-logos {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-team {
+  justify-content: flex-end;
+}
+
+.versus-logos {
+  justify-content: center;
+  margin: 12px 0 6px;
+}
+
+.heading-logo {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
 .screen-title h1,
 .screen-title h2,
 .intro-panel h1 {
@@ -200,6 +223,58 @@ canvas {
   min-height: 118px;
   border-left-width: 12px;
   border-left-color: var(--team-color, var(--kia-red));
+}
+
+.team-logo {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 3px solid #141414;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--team-color), var(--team-secondary));
+  color: var(--team-text);
+  box-shadow: 3px 3px 0 #141414;
+}
+
+.team-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+  background: #fff;
+}
+
+.team-logo-fallback {
+  position: relative;
+  z-index: 0;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.title-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.tiny-logo,
+.inline-logo {
+  width: 26px;
+  height: 26px;
+  border-width: 2px;
+  box-shadow: 2px 2px 0 #141414;
+}
+
+.inline-logo {
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
 .team-stripe {
