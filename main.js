@@ -951,25 +951,19 @@ function drawPlate() {
 function drawStrikeZoneGuide() {
   const zone = FIELD.strike;
   ctx.save();
-  ctx.strokeStyle = "#050505";
   ctx.lineCap = "round";
-  ctx.lineWidth = 10;
-  for (const offset of [-zone.h / 2, 0, zone.h / 2]) {
-    ctx.beginPath();
-    ctx.moveTo(zone.x - zone.w / 2, zone.y + offset);
-    ctx.lineTo(zone.x + zone.w / 2, zone.y + offset);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = "rgba(20,20,20,0.45)";
-  ctx.lineWidth = 8;
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 13;
+  ctx.beginPath();
+  ctx.moveTo(zone.x - zone.w / 2 - 8, zone.y);
+  ctx.lineTo(zone.x + zone.w / 2 + 8, zone.y);
+  ctx.stroke();
   ctx.strokeStyle = "#d71920";
-  for (const offset of [-zone.h / 2, 0, zone.h / 2]) {
-    ctx.lineWidth = offset === 0 ? 7 : 5;
-    ctx.beginPath();
-    ctx.moveTo(zone.x - zone.w / 2, zone.y + offset);
-    ctx.lineTo(zone.x + zone.w / 2, zone.y + offset);
-    ctx.stroke();
-  }
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(zone.x - zone.w / 2 - 8, zone.y);
+  ctx.lineTo(zone.x + zone.w / 2 + 8, zone.y);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1303,6 +1297,14 @@ function resolveBattingResult() {
   const contactScore = batter.contact + timingBonus + contactQuality * 24 - pitchDifficulty * 0.36 + randomInt(-10, 14);
   const powerScore = batter.power + game.swingPower * 0.72 + contactQuality * 18 - pitchDifficulty * 0.18 + randomInt(-14, 16);
   game.swingTiming = Math.round(100 - timingDiff);
+  game.lastContact = {
+    ...(contact || {}),
+    quality: contactQuality,
+    timingDiff,
+    powerScore,
+    contactScore,
+    batter,
+  };
   game.ball.active = false;
 
   if (timingDiff > 58 || contactScore < 38) {
@@ -1466,9 +1468,8 @@ function projectPointToSegment(point, start, end) {
 
 function isPointInStrikeZone(point) {
   const zone = FIELD.strike;
-  const withinLineWidth = point.x >= zone.x - zone.w / 2 && point.x <= zone.x + zone.w / 2;
-  const strikeLines = [zone.y - zone.h / 2, zone.y, zone.y + zone.h / 2];
-  return withinLineWidth && strikeLines.some((lineY) => Math.abs(point.y - lineY) <= 9);
+  const withinLineWidth = point.x >= zone.x - zone.w / 2 - 8 && point.x <= zone.x + zone.w / 2 + 8;
+  return withinLineWidth && Math.abs(point.y - zone.y) <= 10;
 }
 
 function resolvePitchingResult(aiSwung) {
@@ -1717,10 +1718,47 @@ function chooseFatiguedPitch(pitcherObj, pitchType) {
 }
 
 function autoChangeAIPitcher() {
-  const next = game.aiTeam.bullpen.find((p) => p.stamina > 0 && p.name !== game.aiPitcher?.name) || game.aiTeam.bullpen[0];
+  const next = chooseAIBullpenPitcher(true);
   if (!next) return;
   game.aiPitcher = clonePitcher(next);
   game.resultText = `${game.aiTeam.name} 투수 교체`;
+}
+
+function maybeAutoChangeAIPitcher() {
+  if (!game.aiPitcher || game.half !== "top") return;
+  const fatigue = getFatigueLevel(game.aiPitcher);
+  const lead = game.aiScore - game.userScore;
+  const saveSituation = game.inning >= 9 && lead > 0 && lead <= 3;
+  const starterTired = game.aiPitcher.roleType === "starter" && (game.inning >= 7 || fatigue > 0.76);
+  const relieverTired = game.aiPitcher.roleType !== "starter" && (fatigue > 0.72 || game.aiPitcher.stamina <= 3);
+  const blowupRisk = game.bases.first || game.bases.second || game.bases.third ? fatigue > 0.58 && game.outs < 2 : false;
+  if (!saveSituation && !starterTired && !relieverTired && !blowupRisk && game.aiPitcher.stamina > 0) return;
+  const next = chooseAIBullpenPitcher(false);
+  if (!next || next.name === game.aiPitcher.name) return;
+  game.aiPitcher = clonePitcher(next);
+  game.resultText = saveSituation ? `${next.name} 마무리 등판` : `${next.name} 불펜 등판`;
+}
+
+function chooseAIBullpenPitcher(force = false) {
+  const usedName = game.aiPitcher?.name;
+  const available = game.aiTeam.bullpen.filter((p) => p.name !== usedName);
+  if (!available.length) return game.aiTeam.bullpen[0] || null;
+  const lead = game.aiScore - game.userScore;
+  const leverage = game.inning >= 8 && Math.abs(lead) <= 3;
+  const saveSituation = game.inning >= 9 && lead > 0 && lead <= 3;
+  const scoredRecently = game.userScore > game.aiScore;
+  const scoredClose = game.inning >= 7 && lead <= 1;
+  const sorted = [...available].sort((a, b) => {
+    const aCloser = a.role.includes("마무리") ? 18 : 0;
+    const bCloser = b.role.includes("마무리") ? 18 : 0;
+    const aScore = a.control * 0.34 + a.breaking * 0.26 + a.velocity * 0.2 + a.composure * 0.2 + (saveSituation ? aCloser : 0);
+    const bScore = b.control * 0.34 + b.breaking * 0.26 + b.velocity * 0.2 + b.composure * 0.2 + (saveSituation ? bCloser : 0);
+    return bScore - aScore;
+  });
+  if (saveSituation) return sorted.find((p) => p.role.includes("마무리")) || sorted[0];
+  if (leverage || scoredClose || force) return sorted[0];
+  if (scoredRecently) return sorted[Math.min(sorted.length - 1, 1)] || sorted[0];
+  return sorted[randomInt(0, Math.min(sorted.length - 1, 2))];
 }
 
 function changePitcher(newPitcher) {
@@ -1735,6 +1773,7 @@ function changePitcher(newPitcher) {
 }
 
 function prepareBattingPitch() {
+  maybeAutoChangeAIPitcher();
   game.state = "batting";
   game.playPhase = "투구 대기";
   game.pitchDelay = 0.6 + Math.random() * 0.55;
@@ -1790,9 +1829,7 @@ function scoreRun(count) {
 
 function startHitAnimation(result, distance, color) {
   game.playPhase = "타구 처리";
-  const pull = game.currentBatter?.bats === "L" ? -1 : 1;
-  const right = Math.random() < 0.55 ? pull : -pull;
-  const target = chooseFieldingTarget(result, distance, right);
+  const target = chooseFieldingTarget(result, distance);
   game.impact = {
     timer: result.includes("홈런") ? 0.45 : 0.28,
     shake: result.includes("홈런") ? 10 : result === "파울" ? 2 : 5,
@@ -1810,35 +1847,87 @@ function startHitAnimation(result, distance, color) {
   sendFielderToBall(target.end, result);
 }
 
-function chooseFieldingTarget(result, distance, direction) {
+function chooseFieldingTarget(result, distance) {
+  const profile = createBattedBallProfile(result, distance);
+  const direction = profile.direction;
   if (result === "땅볼아웃" || result === "병살타") {
-    const lane = result === "병살타" ? FIELD.fielders.SS : direction > 0 ? FIELD.fielders["2B"] : FIELD.fielders.SS;
+    const laneRoll = Math.random();
+    const lane =
+      result === "병살타"
+        ? laneRoll < 0.5
+          ? FIELD.fielders.SS
+          : FIELD.fielders["2B"]
+        : direction > 0
+          ? laneRoll < 0.6
+            ? FIELD.fielders["2B"]
+            : FIELD.fielders["1B"]
+          : laneRoll < 0.6
+            ? FIELD.fielders.SS
+            : FIELD.fielders["3B"];
     const end = {
-      x: lane.x + randomInt(-22, 22),
-      y: lane.y + randomInt(14, 42),
+      x: lane.x + randomInt(-46, 46) + direction * profile.slice,
+      y: lane.y + randomInt(2, 58),
     };
     return {
       end,
-      peak: { x: (FIELD.plate.x + end.x) / 2, y: (FIELD.plate.y + end.y) / 2 + 24 },
+      peak: { x: (FIELD.plate.x + end.x) / 2 + profile.slice * 0.18, y: (FIELD.plate.y + end.y) / 2 + randomInt(18, 46) },
     };
   }
   if (result === "플라이아웃") {
-    const lane = direction > 0 ? FIELD.fielders.RF : FIELD.fielders.LF;
+    const lane =
+      Math.abs(direction) < 0.25
+        ? FIELD.fielders.CF
+        : direction > 0
+          ? Math.random() < 0.72
+            ? FIELD.fielders.RF
+            : FIELD.fielders.CF
+          : Math.random() < 0.72
+            ? FIELD.fielders.LF
+            : FIELD.fielders.CF;
     const end = {
-      x: lane.x + randomInt(-34, 34),
-      y: lane.y + randomInt(-18, 28),
+      x: lane.x + randomInt(-72, 72) + direction * profile.slice,
+      y: lane.y + randomInt(-24, 64),
     };
     return {
       end,
-      peak: { x: (FIELD.plate.x + end.x) / 2, y: 72 },
+      peak: { x: (FIELD.plate.x + end.x) / 2 + profile.slice * 0.28, y: randomInt(48, 132) },
     };
   }
   return {
     end: {
-      x: FIELD.plate.x + direction * distance * 0.62,
-      y: result.includes("홈런") ? -36 : 160 + Math.random() * 120,
+      x: FIELD.plate.x + direction * profile.distance + profile.slice,
+      y: result.includes("홈런") ? randomInt(-80, 18) : profile.landingY,
     },
-    peak: { x: FIELD.plate.x + direction * distance * 0.28, y: 260 - distance * 0.36 },
+    peak: {
+      x: FIELD.plate.x + direction * profile.distance * 0.45 + profile.slice * 0.5,
+      y: profile.peakY,
+    },
+  };
+}
+
+function createBattedBallProfile(result, baseDistance) {
+  const contact = game.lastContact || {};
+  const batter = contact.batter || game.currentBatter || { bats: "R", pull: 0, launch: 60, power: 60 };
+  const pullSide = batter.bats === "L" ? -1 : 1;
+  const contactAlong = Number.isFinite(contact.along) ? contact.along : 0.62;
+  const quality = Number.isFinite(contact.quality) ? contact.quality : 0.55;
+  const powerScore = Number.isFinite(contact.powerScore) ? contact.powerScore : batter.power;
+  const earlyLate = clamp((0.7 - contactAlong) * 1.9 + batter.pull, -0.9, 0.9);
+  const sprayNoise = randomInt(-34, 34) / 100;
+  const direction = clamp(pullSide * earlyLate + sprayNoise, -1, 1);
+  const distanceNoise = randomInt(-70, 90);
+  const distance =
+    result.includes("홈런")
+      ? 430 + quality * 150 + randomInt(-45, 80)
+      : baseDistance * (0.72 + quality * 0.46) + powerScore * 1.25 + distanceNoise;
+  const launch = clamp((batter.launch - 50) / 80 + quality * 0.65 + randomInt(-18, 18) / 100, 0.08, 1.5);
+  const slice = randomInt(-55, 55) + direction * randomInt(-24, 38);
+  return {
+    direction: Math.abs(direction) < 0.18 ? direction + (Math.random() < 0.5 ? -0.24 : 0.24) : direction,
+    distance: clamp(distance, 120, result.includes("홈런") ? 660 : 520),
+    landingY: clamp(420 - distance * (0.42 + launch * 0.12) + randomInt(-42, 56), 72, 310),
+    peakY: clamp(410 - distance * (0.55 + launch * 0.3) + randomInt(-54, 42), -90, 260),
+    slice,
   };
 }
 
