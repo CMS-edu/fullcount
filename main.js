@@ -1306,6 +1306,24 @@ function drawRunnerIcon(x, y, runner, moving) {
 
 function runnerPathPoint(animation) {
   const t = easeInOut(animation.t);
+  if (animation.path?.length > 1) {
+    const targetDistance = animation.totalDistance * t;
+    let walked = 0;
+    for (let i = 0; i < animation.path.length - 1; i += 1) {
+      const a = animation.path[i];
+      const b = animation.path[i + 1];
+      const legDistance = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      if (walked + legDistance >= targetDistance || i === animation.path.length - 2) {
+        const legT = clamp((targetDistance - walked) / legDistance, 0, 1);
+        const legEase = easeInOut(legT);
+        return {
+          x: a.x + (b.x - a.x) * legEase,
+          y: a.y + (b.y - a.y) * legEase - Math.sin(legT * Math.PI) * 8,
+        };
+      }
+      walked += legDistance;
+    }
+  }
   const x = animation.from.x + (animation.to.x - animation.from.x) * t;
   const y = animation.from.y + (animation.to.y - animation.from.y) * t - Math.sin(t * Math.PI) * 12;
   return { x, y };
@@ -1942,8 +1960,11 @@ function applyHitResult(result) {
     return;
   }
   if (result === "땅볼아웃" || result === "플라이아웃") {
-    startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
-    if (result === "땅볼아웃") animateRunner(runner, "home", "first");
+    const battedBall = startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
+    if (result === "땅볼아웃") {
+      animateRunner(runner, "home", "first");
+      queueOutThrow(battedBall, "first", 0.12);
+    }
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && Math.random() < 0.35) {
       const thirdRunner = game.bases.third;
       game.bases.third = null;
@@ -1956,9 +1977,10 @@ function applyHitResult(result) {
     return;
   }
   if (result === "병살타") {
-    startHitAnimation("병살타", 140, "#e6d0a5");
+    const battedBall = startHitAnimation("병살타", 140, "#e6d0a5");
     if (game.bases.first) animateRunner(game.bases.first, "first", "second");
     animateRunner(runner, "home", "first");
+    queueOutThrow(battedBall, "second", 0.08);
     if (game.bases.first) game.bases.first = null;
     recordOut(Math.min(2, 3 - game.outs), "병살타!");
     return;
@@ -2073,8 +2095,8 @@ function chooseThrowOutPlan(plans, battedBall, result) {
     .map((plan) => {
       const basePoint = getRunnerBasePoint(plan.toBase);
       const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
-      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 430 : 560;
-      const throwDuration = throwDistance / throwSpeed + 0.2 + Math.random() * 0.08;
+      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 255 : 330;
+      const throwDuration = throwDistance / throwSpeed + 0.34 + Math.random() * 0.14;
       const throwArrival = defense.fieldTime + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
@@ -2091,9 +2113,10 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       };
     })
     .filter(({ plan, beatBy }) => {
-      if (plan.toNo >= 4) return beatBy > 0.03;
-      if (plan.isBatter && plan.toBase === "first") return beatBy > 0.11 && result === "1루타";
-      return beatBy > 0.08;
+      if (plan.isBatter) return false;
+      if (plan.toNo >= 4) return beatBy > 0.12;
+      if (plan.toNo - plan.fromNo <= (result === "2루타" ? 2 : 1)) return false;
+      return beatBy > 0.16;
     })
     .sort((a, b) => b.value - a.value || b.beatBy - a.beatBy);
   if (!throwCandidates[0]) return null;
@@ -2109,28 +2132,36 @@ function estimateDefenseTiming(battedBall, result) {
       : game.fielders.filter((f) => ["1B", "2B", "SS", "3B", "p"].includes(f.label));
   const fielder = nearestFielder(candidates, target) || game.fielders[0];
   const fielderDistance = Math.hypot((fielder?.homeX || fielder?.x || FIELD.mound.x) - target.x, (fielder?.homeY || fielder?.y || FIELD.mound.y) - target.y);
-  const ballTime = (battedBall.duration || 1) * (target.y < 250 ? 0.9 : 0.68);
-  const fielderTime = (battedBall.reactionDelay || 0.1) + fielderDistance / ((fielder?.speed || 170) + 35);
+  const ballTime = (battedBall.duration || 1) * (target.y < 250 ? 0.96 : 0.76);
+  const fielderTime = (battedBall.reactionDelay || 0.1) + fielderDistance / ((fielder?.speed || 170) * 0.72);
   return {
     fielder,
     fieldPoint: target,
-    fieldTime: Math.max(ballTime, fielderTime) + 0.18 + Math.random() * 0.12,
+    fieldTime: Math.max(ballTime, fielderTime) + 0.28 + Math.random() * 0.18,
+  };
+}
+
+function queueOutThrow(battedBall, toBase, extraDelay = 0) {
+  if (!battedBall) return;
+  const defense = estimateDefenseTiming(battedBall, battedBall.result);
+  const to = getRunnerBasePoint(toBase);
+  const distance = Math.hypot(to.x - defense.fieldPoint.x, to.y - defense.fieldPoint.y);
+  game.throwBall = {
+    from: { ...defense.fieldPoint },
+    to,
+    delay: defense.fieldTime + extraDelay,
+    duration: distance / 315 + 0.34 + Math.random() * 0.14,
+    timer: 0,
   };
 }
 
 function runnerTravelTime(runner, fromBase, toBase, isBatter = false) {
-  const fromNo = baseNumber(fromBase);
-  const toNo = baseNumber(toBase);
   const speed = clamp(runner?.speed || 60, 30, 99);
-  const runnerSpeed = 168 + speed * 1.75;
-  let distance = 0;
-  for (let base = fromNo; base < toNo; base += 1) {
-    const a = getRunnerBasePoint(baseNameFromNumber(base));
-    const b = getRunnerBasePoint(baseNameFromNumber(base + 1));
-    distance += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  const turns = Math.max(0, toNo - fromNo - 1);
-  return distance / runnerSpeed + turns * 0.11 + (isBatter ? 0.1 : -0.04) + randomInt(-6, 8) / 100;
+  const path = buildBasePath(fromBase, toBase);
+  const distance = pathDistance(path);
+  const runnerSpeed = 108 + speed * 1.15;
+  const turns = Math.max(0, path.length - 2);
+  return distance / runnerSpeed + turns * 0.18 + (isBatter ? 0.18 : 0.04) + randomInt(-5, 9) / 100;
 }
 
 function baseNumber(base) {
@@ -2419,19 +2450,44 @@ function scoreRun(count) {
 
 function animateRunner(runner, fromBase, toBase) {
   if (!runner) return;
-  const from = getRunnerBasePoint(fromBase);
-  const to = getRunnerBasePoint(toBase);
+  const path = buildBasePath(fromBase, toBase);
+  const from = path[0] || getRunnerBasePoint(fromBase);
+  const to = path[path.length - 1] || getRunnerBasePoint(toBase);
   const speed = clamp(runner.speed || 60, 35, 99);
-  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const dist = pathDistance(path);
   game.runnerAnimations.push({
     runner,
     from,
     to,
+    path,
+    totalDistance: dist,
     fromBase,
     toBase,
     t: 0,
-    duration: clamp(dist / (210 + speed * 2.4), 0.38, 1.15),
+    duration: clamp(dist / (108 + speed * 1.15), 0.85, 3.2),
   });
+}
+
+function buildBasePath(fromBase, toBase) {
+  if (fromBase === "home" && toBase === "home") {
+    return ["home", "first", "second", "third", "home"].map(getRunnerBasePoint);
+  }
+  const fromNo = fromBase === "home" ? 0 : baseNumber(fromBase);
+  const toNo = toBase === "home" ? 4 : baseNumber(toBase);
+  const path = [];
+  for (let base = fromNo; base <= toNo; base += 1) {
+    path.push(getRunnerBasePoint(baseNameFromNumber(base)));
+  }
+  if (!path.length) return [getRunnerBasePoint(fromBase), getRunnerBasePoint(toBase)];
+  return path;
+}
+
+function pathDistance(path) {
+  let distance = 0;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    distance += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
+  }
+  return distance;
 }
 
 function getRunnerBasePoint(base) {
@@ -2445,6 +2501,8 @@ function startHitAnimation(result, distance, color) {
   game.playPhase = "타구 처리";
   const target = chooseFieldingTarget(result, distance);
   const isHomer = result.includes("홈런");
+  const isOutBall = result.includes("아웃") || result === "병살타";
+  const isBaseHit = ["1루타", "2루타", "3루타", "번트안타"].includes(result);
   const start = {
     x: FIELD.plate.x + randomInt(-10, 10),
     y: FIELD.plate.y + randomInt(-7, 6),
@@ -2465,7 +2523,13 @@ function startHitAnimation(result, distance, color) {
     end: target.end,
     color,
     result,
-    reactionDelay: isHomer ? 0.18 + Math.random() * 0.14 : 0.08 + Math.random() * 0.22,
+    reactionDelay: isHomer
+      ? 0.2 + Math.random() * 0.18
+      : isBaseHit
+        ? 0.46 + Math.random() * 0.34
+        : isOutBall
+          ? 0.1 + Math.random() * 0.18
+          : 0.16 + Math.random() * 0.18,
     fielderSent: false,
   };
   return game.hitBall;
@@ -2474,6 +2538,20 @@ function startHitAnimation(result, distance, color) {
 function chooseFieldingTarget(result, distance) {
   const profile = createBattedBallProfile(result, distance);
   const direction = profile.direction;
+  if (result === "파울") {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const y = randomInt(150, 460);
+    const bounds = fairBoundsAtY(y);
+    const x = side < 0 ? bounds.left - randomInt(34, 170) : bounds.right + randomInt(34, 170);
+    const end = { x: clamp(x, 18, W - 18), y };
+    return {
+      end,
+      peak: {
+        x: (FIELD.plate.x + end.x) / 2 + side * randomInt(24, 90),
+        y: randomInt(80, 210),
+      },
+    };
+  }
   if (result === "땅볼아웃" || result === "병살타") {
     const laneRoll = Math.random();
     const lane =
@@ -2488,10 +2566,10 @@ function chooseFieldingTarget(result, distance) {
           : laneRoll < 0.6
             ? FIELD.fielders.SS
             : FIELD.fielders["3B"];
-    const end = {
+    const end = clampFairPoint({
       x: lane.x + randomInt(-78, 78) + direction * profile.slice,
       y: lane.y + randomInt(-18, 82),
-    };
+    });
     return {
       end,
       peak: { x: (FIELD.plate.x + end.x) / 2 + profile.slice * 0.18, y: (FIELD.plate.y + end.y) / 2 + randomInt(18, 46) },
@@ -2508,24 +2586,46 @@ function chooseFieldingTarget(result, distance) {
           : Math.random() < 0.72
             ? FIELD.fielders.LF
             : FIELD.fielders.CF;
-    const end = {
+    const end = clampFairPoint({
       x: lane.x + randomInt(-120, 120) + direction * profile.slice,
       y: lane.y + randomInt(-44, 92),
-    };
+    });
     return {
       end,
       peak: { x: (FIELD.plate.x + end.x) / 2 + profile.slice * 0.28, y: randomInt(48, 132) },
     };
   }
   return {
-    end: {
+    end: result.includes("홈런") ? {
       x: FIELD.plate.x + direction * profile.distance + profile.slice + randomInt(-70, 70),
       y: result.includes("홈런") ? randomInt(-80, 18) : profile.landingY,
-    },
+    } : clampFairPoint({
+      x: FIELD.plate.x + direction * profile.distance + profile.slice + randomInt(-70, 70),
+      y: profile.landingY,
+    }),
     peak: {
       x: FIELD.plate.x + direction * profile.distance * 0.45 + profile.slice * 0.5,
       y: profile.peakY,
     },
+  };
+}
+
+function fairBoundsAtY(y) {
+  const topY = 118;
+  const homeY = FIELD.home.y;
+  const progress = clamp((homeY - y) / (homeY - topY), 0, 1);
+  return {
+    left: FIELD.home.x + (72 - FIELD.home.x) * progress,
+    right: FIELD.home.x + (888 - FIELD.home.x) * progress,
+  };
+}
+
+function clampFairPoint(point) {
+  const bounds = fairBoundsAtY(point.y);
+  const margin = 18;
+  return {
+    x: clamp(point.x, bounds.left + margin, bounds.right - margin),
+    y: clamp(point.y, 78, FIELD.home.y - 28),
   };
 }
 
