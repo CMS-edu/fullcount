@@ -194,6 +194,7 @@ const game = {
   pitchMovement: { x: 0, y: 0 },
   ball: makeBall(),
   hitBall: null,
+  throwBall: null,
   fielders: [],
   bat: { angle: -0.6, neutral: -0.6, held: false, contacted: false, attempted: false, spin: 0 },
   aiBat: { neutral: -0.78, angle: -0.78, timer: 0, duration: 0.34 },
@@ -499,6 +500,7 @@ function resetGame(toIntro = true) {
   game.aiPitcher = clonePitcher(selectOpponentStarter());
   game.ball = makeBall();
   game.hitBall = null;
+  game.throwBall = null;
   game.fielders = createFielders();
   game.bat = { angle: -0.6, neutral: -0.6, held: false, contacted: false, attempted: false, spin: 0 };
   game.aiBat = { neutral: -0.78, angle: -0.78, timer: 0, duration: 0.34 };
@@ -579,6 +581,7 @@ function update(deltaTime) {
   updateBat(deltaTime);
   updateAIBat(deltaTime);
   updateHitBall(deltaTime);
+  updateThrowBall(deltaTime);
   updateFielders(deltaTime);
   updateRunnerAnimations(deltaTime);
 }
@@ -680,6 +683,14 @@ function updateHitBall(deltaTime) {
   }
   if (game.hitBall.t >= 1 && game.playPhase === "타구 처리") {
     game.playPhase = "판정 대기";
+  }
+}
+
+function updateThrowBall(deltaTime) {
+  if (!game.throwBall) return;
+  game.throwBall.timer += deltaTime;
+  if (game.throwBall.timer > game.throwBall.delay + game.throwBall.duration + 0.22) {
+    game.throwBall = null;
   }
 }
 
@@ -1010,6 +1021,7 @@ function drawBatting() {
   drawBatter();
   drawBall();
   drawHitBall();
+  drawThrowBall();
   if (!game.ball.active && game.state === "batting") {
     drawCenterHint("투수가 준비 중");
   }
@@ -1019,6 +1031,7 @@ function drawPitching() {
   drawBatter(true);
   drawBall();
   drawHitBall();
+  drawThrowBall();
   if (!game.ball.active && game.state === "pitching") {
     drawCenterHint(`${game.selectedPitch} 선택됨`);
   }
@@ -1423,6 +1436,33 @@ function drawHitBall() {
   ctx.beginPath();
   ctx.arc(p.x, p.y, 7, 0, TWO_PI);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawThrowBall() {
+  const throwBall = game.throwBall;
+  if (!throwBall || throwBall.timer < throwBall.delay) return;
+  const t = clamp((throwBall.timer - throwBall.delay) / throwBall.duration, 0, 1);
+  const x = throwBall.from.x + (throwBall.to.x - throwBall.from.x) * t;
+  const y = throwBall.from.y + (throwBall.to.y - throwBall.from.y) * t - Math.sin(t * Math.PI) * 24;
+  ctx.save();
+  ctx.strokeStyle = "#f4c24d";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 8]);
+  ctx.globalAlpha = 0.75;
+  ctx.beginPath();
+  ctx.moveTo(throwBall.from.x, throwBall.from.y);
+  ctx.lineTo(throwBall.to.x, throwBall.to.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, TWO_PI);
+  ctx.fill();
+  ctx.strokeStyle = "#d71920";
+  ctx.lineWidth = 2;
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1947,7 +1987,15 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
 
   const plans = buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result);
   const outPlan = chooseThrowOutPlan(plans, battedBall, result);
-  if (outPlan) outPlan.out = true;
+  if (outPlan) {
+    outPlan.out = true;
+    if (outPlan.throwInfo) {
+      game.throwBall = {
+        ...outPlan.throwInfo,
+        timer: 0,
+      };
+    }
+  }
 
   const next = { first: null, second: null, third: null };
   let runs = 0;
@@ -2026,10 +2074,21 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       const basePoint = getRunnerBasePoint(plan.toBase);
       const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
       const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 430 : 560;
-      const throwArrival = defense.fieldTime + throwDistance / throwSpeed + 0.2 + Math.random() * 0.08;
+      const throwDuration = throwDistance / throwSpeed + 0.2 + Math.random() * 0.08;
+      const throwArrival = defense.fieldTime + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
-      return { plan, beatBy, value };
+      return {
+        plan,
+        beatBy,
+        value,
+        throwInfo: {
+          from: { ...defense.fieldPoint },
+          to: basePoint,
+          delay: defense.fieldTime,
+          duration: throwDuration,
+        },
+      };
     })
     .filter(({ plan, beatBy }) => {
       if (plan.toNo >= 4) return beatBy > 0.03;
@@ -2037,7 +2096,9 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       return beatBy > 0.08;
     })
     .sort((a, b) => b.value - a.value || b.beatBy - a.beatBy);
-  return throwCandidates[0]?.plan || null;
+  if (!throwCandidates[0]) return null;
+  throwCandidates[0].plan.throwInfo = throwCandidates[0].throwInfo;
+  return throwCandidates[0].plan;
 }
 
 function estimateDefenseTiming(battedBall, result) {
@@ -2146,6 +2207,7 @@ function switchHalfInning(forceBottom = false) {
   game.outs = 0;
   game.bases = { first: null, second: null, third: null };
   game.runnerAnimations = [];
+  game.throwBall = null;
   if (forceBottom || game.half === "top") {
     game.half = "bottom";
     game.state = "inningChange";
@@ -2305,6 +2367,7 @@ function prepareBattingPitch() {
   game.pitchDelay = 0.6 + Math.random() * 0.55;
   game.ball = makeBall();
   game.hitBall = null;
+  game.throwBall = null;
   resetFielderTargets(true);
   game.bat.contacted = false;
   game.bat.attempted = false;
@@ -2322,6 +2385,7 @@ function resumeHalf() {
     game.playPhase = "구종 선택";
     game.ball = makeBall();
     game.hitBall = null;
+    game.throwBall = null;
     resetFielderTargets(true);
   }
   syncCurrentMatchup();
