@@ -677,6 +677,7 @@ function drawField() {
   drawBase(FIELD.second, "2B", Boolean(game.bases.second));
   drawBase(FIELD.third, "3B", Boolean(game.bases.third));
   drawDefensePositions();
+  drawStrikeZoneGuide();
   drawPlate();
   drawPitcher();
   drawCatcher();
@@ -936,7 +937,6 @@ function drawBatter(isAi = false) {
 
 function drawPlate() {
   const p = FIELD.plate;
-  const zone = FIELD.strike;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
   ctx.moveTo(p.x - 13, p.y - 7);
@@ -946,20 +946,31 @@ function drawPlate() {
   ctx.lineTo(p.x - 11, p.y + 7);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = "rgba(20,20,20,0.45)";
-  ctx.lineWidth = 11;
+}
+
+function drawStrikeZoneGuide() {
+  const zone = FIELD.strike;
+  ctx.save();
+  ctx.strokeStyle = "#050505";
   ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2, zone.y);
-  ctx.stroke();
+  ctx.lineWidth = 10;
+  for (const offset of [-zone.h / 2, 0, zone.h / 2]) {
+    ctx.beginPath();
+    ctx.moveTo(zone.x - zone.w / 2, zone.y + offset);
+    ctx.lineTo(zone.x + zone.w / 2, zone.y + offset);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(20,20,20,0.45)";
+  ctx.lineWidth = 8;
   ctx.strokeStyle = "#d71920";
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  ctx.moveTo(zone.x - zone.w / 2, zone.y);
-  ctx.lineTo(zone.x + zone.w / 2, zone.y);
-  ctx.stroke();
-  ctx.lineCap = "butt";
+  for (const offset of [-zone.h / 2, 0, zone.h / 2]) {
+    ctx.lineWidth = offset === 0 ? 7 : 5;
+    ctx.beginPath();
+    ctx.moveTo(zone.x - zone.w / 2, zone.y + offset);
+    ctx.lineTo(zone.x + zone.w / 2, zone.y + offset);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawBase(pos, label, occupied) {
@@ -1455,12 +1466,9 @@ function projectPointToSegment(point, start, end) {
 
 function isPointInStrikeZone(point) {
   const zone = FIELD.strike;
-  return (
-    point.x >= zone.x - zone.w / 2 &&
-    point.x <= zone.x + zone.w / 2 &&
-    point.y >= zone.y - zone.h / 2 &&
-    point.y <= zone.y + zone.h / 2
-  );
+  const withinLineWidth = point.x >= zone.x - zone.w / 2 && point.x <= zone.x + zone.w / 2;
+  const strikeLines = [zone.y - zone.h / 2, zone.y, zone.y + zone.h / 2];
+  return withinLineWidth && strikeLines.some((lineY) => Math.abs(point.y - lineY) <= 9);
 }
 
 function resolvePitchingResult(aiSwung) {
