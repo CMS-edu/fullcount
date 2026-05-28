@@ -519,24 +519,35 @@ function draw() {
 }
 
 function drawMenuBackdrop() {
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, "#1b1b1b");
-  grad.addColorStop(0.48, "#3e1014");
-  grad.addColorStop(1, "#2d7a48");
-  ctx.fillStyle = grad;
+  ctx.fillStyle = "#171717";
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  for (let i = 0; i < 8; i += 1) {
-    ctx.beginPath();
-    ctx.arc(160 + i * 115, 430 + Math.sin(i) * 18, 120, 0, TWO_PI);
-    ctx.fill();
-  }
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.font = "900 84px Segoe UI";
+  ctx.fillStyle = "#d71920";
+  ctx.fillRect(0, 0, W, 72);
+  ctx.fillStyle = "#2f7d49";
+  ctx.fillRect(0, 360, W, 180);
+  ctx.fillStyle = "#c98242";
+  ctx.beginPath();
+  ctx.moveTo(480, 438);
+  ctx.lineTo(650, 330);
+  ctx.lineTo(480, 224);
+  ctx.lineTo(310, 330);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.fillStyle = "#fff4df";
+  ctx.font = "900 82px Segoe UI";
   ctx.textAlign = "center";
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 8;
+  ctx.strokeText("FULL COUNT", W / 2, 190);
   ctx.fillText("FULL COUNT", W / 2, 190);
   ctx.fillStyle = "#d71920";
-  ctx.fillRect(310, 218, 340, 9);
+  ctx.fillRect(300, 218, 360, 14);
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(300, 218, 360, 14);
 }
 
 function drawField() {
@@ -624,10 +635,12 @@ function drawField() {
 
 function drawScoreboard() {
   ctx.save();
-  ctx.fillStyle = "rgba(12,12,12,0.92)";
+  ctx.fillStyle = "#050505";
   ctx.fillRect(0, 0, W, 76);
   ctx.fillStyle = "#d71920";
-  ctx.fillRect(0, 0, W, 6);
+  ctx.fillRect(0, 0, W, 10);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 74, W, 3);
 
   ctx.fillStyle = "#fff";
   ctx.font = "900 29px Segoe UI";
@@ -654,11 +667,20 @@ function drawGameHUD() {
   const batter = game.currentBatter;
   const pitcherObj = game.half === "top" ? game.aiPitcher : game.currentPitcher;
   ctx.save();
-  ctx.fillStyle = "rgba(12,12,12,0.82)";
-  roundRect(16, 84, 928, 50, 8);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.16)";
-  ctx.lineWidth = 1;
+  ctx.fillStyle = "#050505";
+  ctx.fillRect(16, 84, 928, 50);
+  ctx.fillStyle = "#d71920";
+  ctx.fillRect(16, 84, 928, 5);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(16, 84, 928, 50);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(330, 88);
+  ctx.lineTo(330, 131);
+  ctx.moveTo(630, 88);
+  ctx.lineTo(630, 131);
   ctx.stroke();
 
   ctx.textBaseline = "middle";
@@ -670,7 +692,7 @@ function drawGameHUD() {
   ctx.font = "900 20px Segoe UI";
   ctx.fillText(batter?.name || "-", 34, 120);
   ctx.font = "800 12px Segoe UI";
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.fillStyle = "#d7d7d7";
   ctx.fillText(`컨택 ${batter?.contact || "-"}  파워 ${batter?.power || "-"}  주력 ${batter?.speed || "-"}`, 158, 120);
 
   ctx.textAlign = "center";
@@ -689,7 +711,7 @@ function drawGameHUD() {
   ctx.font = "900 20px Segoe UI";
   ctx.fillText(pitcherObj?.name || "-", 926, 120);
   ctx.font = "800 12px Segoe UI";
-  ctx.fillStyle = "rgba(255,255,255,0.78)";
+  ctx.fillStyle = "#d7d7d7";
   ctx.fillText(`체력 ${Math.round(pitcherObj?.stamina || 0)}  제구 ${pitcherObj?.control || "-"}  변화 ${pitcherObj?.breaking || "-"}`, 795, 120);
   ctx.restore();
 }
@@ -722,12 +744,11 @@ function drawResult() {
   const boxH = isBig ? 74 : 58;
   const boxX = W / 2 - boxW / 2;
   const boxY = 154;
-  ctx.fillStyle = isBig ? "rgba(215,25,32,0.92)" : "rgba(12,12,12,0.84)";
-  roundRect(boxX, boxY, boxW, boxH, 8);
-  ctx.fill();
-  ctx.strokeStyle = isBig ? "#ffd34d" : "rgba(255,255,255,0.34)";
-  ctx.lineWidth = isBig ? 4 : 2;
-  ctx.stroke();
+  ctx.fillStyle = isBig ? "#d71920" : "#050505";
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = isBig ? "#ffd34d" : "#ffffff";
+  ctx.lineWidth = isBig ? 6 : 4;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
   ctx.fillStyle = isBig ? "#ffd34d" : "#fff";
   ctx.strokeStyle = "#141414";
   ctx.lineWidth = 4;
@@ -834,32 +855,33 @@ function drawBatter(isAi = false) {
 
   const angle = isAi ? game.aiBat.angle : game.bat.angle;
   ctx.rotate(angle);
-  const barrelGrad = ctx.createLinearGradient(10, 0, 76, 0);
-  barrelGrad.addColorStop(0, "#5c351d");
-  barrelGrad.addColorStop(0.55, "#c48a47");
-  barrelGrad.addColorStop(1, "#f0c16a");
-  ctx.strokeStyle = barrelGrad;
-  ctx.lineWidth = 5;
+  ctx.lineCap = "butt";
+  ctx.fillStyle = "#3b210f";
+  ctx.fillRect(2, -3, 16, 6);
+  ctx.fillStyle = "#f4f4f4";
+  ctx.fillRect(6, -4, 3, 8);
+  ctx.fillRect(12, -4, 3, 8);
+  ctx.fillStyle = "#b66b2c";
+  ctx.strokeStyle = "#1c1008";
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(10, 0);
-  ctx.lineTo(66, 0);
-  ctx.stroke();
-  ctx.strokeStyle = "#4b2917";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(4, 0);
-  ctx.lineTo(13, 0);
-  ctx.stroke();
-  ctx.strokeStyle = "#e7b65b";
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(58, 0);
-  ctx.lineTo(82, 0);
-  ctx.stroke();
-  ctx.fillStyle = "#2a160c";
-  ctx.beginPath();
-  ctx.arc(3, 0, 3, 0, TWO_PI);
+  ctx.moveTo(18, -4);
+  ctx.lineTo(62, -6);
+  ctx.lineTo(84, -8);
+  ctx.lineTo(88, 0);
+  ctx.lineTo(84, 8);
+  ctx.lineTo(62, 6);
+  ctx.lineTo(18, 4);
+  ctx.closePath();
   ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#e1a254";
+  ctx.fillRect(62, -5, 18, 10);
+  ctx.strokeStyle = "#1c1008";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(62, -5, 18, 10);
+  ctx.fillStyle = "#1c1008";
+  ctx.fillRect(0, -5, 5, 10);
   ctx.restore();
 }
 
@@ -1105,9 +1127,11 @@ function drawInfoCard(x, y, title, person, lines) {
 
 function drawCenterHint(text) {
   ctx.save();
-  ctx.fillStyle = "rgba(255,255,255,0.88)";
-  roundRect(W / 2 - 150, 146, 300, 44, 8);
-  ctx.fill();
+  ctx.fillStyle = "#fff4df";
+  ctx.fillRect(W / 2 - 150, 146, 300, 44);
+  ctx.strokeStyle = "#050505";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(W / 2 - 150, 146, 300, 44);
   ctx.fillStyle = "#141414";
   ctx.font = "900 22px Segoe UI";
   ctx.textAlign = "center";
