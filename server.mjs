@@ -10,6 +10,10 @@ const host = process.env.HOST || (process.env.RENDER ? "0.0.0.0" : "127.0.0.1");
 const scrypt = promisify(scryptCallback);
 const sessionSecret = process.env.SESSION_SECRET || "dev-fullcount-secret-change-on-render";
 const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.RENDER);
+const allowedOrigins = String(process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const types = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -82,9 +86,16 @@ async function bootDatabase() {
 await bootDatabase();
 
 createServer(async (req, res) => {
+  const url = new URL(req.url || "/", `http://${req.headers.host}`);
+  const isApiRequest = url.pathname.startsWith("/api/");
+  if (isApiRequest) applyCors(req, res);
+  if (isApiRequest && req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   try {
-    const url = new URL(req.url || "/", `http://${req.headers.host}`);
-    if (url.pathname.startsWith("/api/")) {
+    if (isApiRequest) {
       await handleApi(req, res, url);
       return;
     }
@@ -389,9 +400,22 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return;
+  const allowOrigin = allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+  if (!allowOrigin) return;
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Vary", "Origin");
+}
+
 function setSessionCookie(res, token) {
   const secure = isProduction ? "; Secure" : "";
-  res.setHeader("Set-Cookie", `fc_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${secure}`);
+  const sameSite = isProduction ? "None" : "Lax";
+  res.setHeader("Set-Cookie", `fc_session=${token}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=2592000${secure}`);
 }
 
 function clearSessionCookie(res) {

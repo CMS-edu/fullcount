@@ -1,5 +1,6 @@
 const authPanel = document.getElementById("authPanel");
 const authButtons = document.querySelectorAll("[data-auth-view]");
+const API_BASE = String(window.FULLCOUNT_API_BASE || "").replace(/\/$/, "");
 
 const authState = {
   user: null,
@@ -205,8 +206,9 @@ async function submitAuth(path, body, message) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE}${path}`, {
     method: options.method || "GET",
+    credentials: "include",
     headers: options.body ? { "Content-Type": "application/json" } : undefined,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });

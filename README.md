@@ -48,6 +48,21 @@ Render에서 GitHub 저장소를 연결한 뒤 Blueprint로 `render.yaml`을 사
 
 Blueprint 배포 중 `DATABASE_URL` 값을 입력하라고 나오면 기존 Render PostgreSQL의 Internal Database URL을 붙여넣으세요. DB URL은 비밀번호가 들어있는 민감정보라서 GitHub에 커밋하면 안 됩니다.
 
+프론트엔드를 Vercel에서 따로 띄우는 경우:
+
+1. `config.js`의 `window.FULLCOUNT_API_BASE`를 Render 백엔드 주소로 설정합니다.
+2. Render Web Service 환경변수에 `CORS_ORIGIN`을 Vercel 주소로 넣습니다.
+
+예시:
+
+```js
+window.FULLCOUNT_API_BASE = "https://fullcount.onrender.com";
+```
+
+```txt
+CORS_ORIGIN=https://your-project.vercel.app
+```
+
 직접 Web Service로 만들 경우:
 
 - Runtime: Node
