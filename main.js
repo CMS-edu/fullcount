@@ -39,6 +39,9 @@ const pitchCatalog = {
   "스위퍼": { speedModifier: -10, movement: { x: -50, y: 5 }, controlDifficulty: 21, color: "#c79bff" },
 };
 
+const LINEUP_POSITIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
+const POSITION_KR = { C: "포수", "1B": "1루수", "2B": "2루수", "3B": "3루수", SS: "유격수", LF: "좌익수", CF: "중견수", RF: "우익수", DH: "지명타자" };
+
 const kiaClub = {
   name: "KIA 타이거즈",
   manager: "이범호",
@@ -267,6 +270,8 @@ const game = {
   isBallInPlay: false,
   stamina: 100,
   selectedLineup: [],
+  lineupSlots: {},
+  activeLineupSlot: null,
   selectedPitcher: null,
   selectedPitch: "직구",
   combo: 0,
@@ -302,6 +307,37 @@ function batter(name, position, bats, contact, power, speed, bunt, nickname, not
     launch: clamp(Math.round(power * 0.55 + speed * 0.12 + ((seed >> 2) % 24)), 32, 98),
     pull: ((seed % 21) - 10) / 100,
   };
+}
+
+function getPlayerEligiblePositions(player) {
+  const raw = (player.position || "").toUpperCase();
+  const parts = raw.split("/").map((s) => s.trim());
+  const result = new Set();
+  for (const part of parts) {
+    if (part === "OF") { result.add("LF"); result.add("CF"); result.add("RF"); }
+    else if (part === "IF") { result.add("1B"); result.add("2B"); result.add("3B"); result.add("SS"); }
+    else if (part === "UTIL") { LINEUP_POSITIONS.forEach((p) => result.add(p)); }
+    else if (LINEUP_POSITIONS.includes(part)) result.add(part);
+  }
+  if (result.size === 0) result.add("DH");
+  return [...result];
+}
+
+function autoFillSlots(team) {
+  const fillOrder = ["C", "SS", "2B", "3B", "1B", "CF", "LF", "RF", "DH"];
+  const slots = {};
+  const used = new Set();
+  for (const pos of fillOrder) {
+    const eligible = team.batters.filter((b) => !used.has(b.name) && getPlayerEligiblePositions(b).includes(pos));
+    if (eligible.length > 0) { slots[pos] = eligible[0]; used.add(eligible[0].name); }
+  }
+  for (const pos of LINEUP_POSITIONS) {
+    if (!slots[pos]) {
+      const fallback = team.batters.find((b) => !used.has(b.name));
+      if (fallback) { slots[pos] = fallback; used.add(fallback.name); }
+    }
+  }
+  return slots;
 }
 
 function pitcher(name, velocity, control, breaking, stamina, role, pitches, hand = "R", note = "") {
@@ -634,11 +670,8 @@ function chooseOpponentTeam() {
 }
 
 function getDefaultLineup(team = currentUserTeam()) {
-  const names = team.defaultLineupNames || team.batters.slice(0, 9).map((b) => b.name);
-  return names
-    .map((name) => team.batters.find((b) => b.name === name))
-    .filter(Boolean)
-    .slice(0, 9);
+  const slots = autoFillSlots(team);
+  return LINEUP_POSITIONS.map((pos) => slots[pos]).filter(Boolean).slice(0, 9);
 }
 
 function lineupStorageKey(team = currentUserTeam()) {
@@ -647,6 +680,28 @@ function lineupStorageKey(team = currentUserTeam()) {
 
 function pitcherStorageKey(team = currentUserTeam()) {
   return `fullcount:selectedPitcher:${team.name}`;
+}
+
+function lineupSlotsStorageKey(team = currentUserTeam()) {
+  return `fullcount:lineupSlots:${team.name}`;
+}
+
+function loadSavedLineupSlots(team = currentUserTeam()) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(lineupSlotsStorageKey(team)));
+    if (saved && typeof saved === "object") {
+      const slots = {};
+      for (const pos of LINEUP_POSITIONS) {
+        if (saved[pos]) {
+          const found = team.batters.find((b) => b.name === saved[pos]);
+          if (found) slots[pos] = found;
+        }
+      }
+      const names = Object.values(slots).map((b) => b.name);
+      if (new Set(names).size === names.length && names.length === 9) return slots;
+    }
+  } catch {}
+  return autoFillSlots(team);
 }
 
 function init() {
@@ -707,7 +762,9 @@ function setupTeams() {
 function setupLineup() {
   if (!game.userTeam) game.userTeam = loadSavedTeam();
   game.state = "lineupSelect";
-  game.selectedLineup = loadSavedLineup(game.userTeam);
+  game.lineupSlots = loadSavedLineupSlots(game.userTeam);
+  game.activeLineupSlot = LINEUP_POSITIONS.find((p) => !game.lineupSlots[p]) || null;
+  game.selectedLineup = LINEUP_POSITIONS.map((p) => game.lineupSlots[p]).filter(Boolean);
   renderUI(true);
 }
 
@@ -3356,16 +3413,40 @@ function handleMouseClick(e) {
   if (!action) return;
   if (action === "selectTeam") selectUserTeam(e.target.closest("[data-team]").dataset.team);
   if (action === "start") setupLineup();
+  if (action === "selectSlot") {
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    if (slot && LINEUP_POSITIONS.includes(slot)) {
+      game.activeLineupSlot = game.activeLineupSlot === slot ? null : slot;
+      renderUI(true);
+    }
+  }
+  if (action === "clearSlot") {
+    e.stopPropagation();
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    if (slot && game.lineupSlots[slot]) {
+      delete game.lineupSlots[slot];
+      if (!game.activeLineupSlot) game.activeLineupSlot = slot;
+      renderUI(true);
+    }
+  }
   if (action === "defaultLineup") {
+    game.lineupSlots = autoFillSlots(currentUserTeam());
+    game.activeLineupSlot = null;
     game.selectedLineup = getDefaultLineup();
     renderUI(true);
   }
-  if (action === "confirmLineup" && game.selectedLineup.length === 9) {
+  if (action === "confirmLineup") {
+    const filledCount = LINEUP_POSITIONS.filter((p) => game.lineupSlots[p]).length;
+    if (filledCount !== 9) return;
+    game.selectedLineup = LINEUP_POSITIONS.map((p) => game.lineupSlots[p]);
+    const slotNames = {};
+    for (const pos of LINEUP_POSITIONS) slotNames[pos] = game.lineupSlots[pos].name;
+    localStorage.setItem(lineupSlotsStorageKey(), JSON.stringify(slotNames));
     localStorage.setItem(lineupStorageKey(), JSON.stringify(game.selectedLineup.map((b) => b.name)));
     game.state = "pitcherSelect";
     renderUI(true);
   }
-  if (action === "toggleBatter") toggleBatter(e.target.closest("[data-batter]").dataset.batter);
+  if (action === "assignBatter") assignBatterToSlot(e.target.closest("[data-batter]").dataset.batter);
   if (action === "selectPitcher") selectPitcher(currentUserTeam().starters.find((p) => p.name === e.target.closest("[data-pitcher]").dataset.pitcher));
   if (action === "selectBullpen") {
     const name = e.target.closest("[data-bullpen]").dataset.bullpen;
@@ -3468,6 +3549,8 @@ function renderUI(force = false) {
     userTeam: game.userTeam?.name,
     opponent: game.aiTeam?.name,
     lineup: game.selectedLineup.map((b) => b.name),
+    activeSlot: game.activeLineupSlot,
+    slotsFilled: LINEUP_POSITIONS.filter((p) => game.lineupSlots[p]).length,
     pitcher: game.currentPitcher?.name,
     pitch: game.selectedPitch,
     paused: game.paused,
@@ -3553,43 +3636,60 @@ function renderIntro() {
 
 function renderLineupSelect() {
   const team = currentUserTeam();
+  const slots = game.lineupSlots;
+  const activeSlot = game.activeLineupSlot;
+  const filledCount = LINEUP_POSITIONS.filter((p) => slots[p]).length;
+  const assignedNames = new Set(Object.values(slots).map((b) => b.name));
+
+  const slotsHtml = LINEUP_POSITIONS.map((pos, i) => {
+    const player = slots[pos];
+    const isActive = pos === activeSlot;
+    return `
+      <div class="slot-row${isActive ? " active" : ""}${player ? " filled" : ""}" data-action="selectSlot" data-slot="${pos}">
+        <span class="batting-order">${i + 1}</span>
+        <span class="pos-badge">${pos}</span>
+        <span class="pos-kr">${POSITION_KR[pos]}</span>
+        <span class="slot-player">${player ? player.name : "—"}</span>
+        ${player ? `<button class="slot-clear" data-action="clearSlot" data-slot="${pos}">×</button>` : ""}
+      </div>
+    `;
+  }).join("");
+
+  const poolHtml = team.batters.map((b) => {
+    const isAssigned = assignedNames.has(b.name);
+    const eligible = activeSlot ? getPlayerEligiblePositions(b).includes(activeSlot) : true;
+    return `
+      <button class="player-card${isAssigned ? " assigned" : ""}${!eligible && !isAssigned ? " ineligible" : ""}" data-action="assignBatter" data-batter="${b.name}">
+        <strong>${b.name}</strong>
+        <span class="muted">${b.position} · ${b.bats}타 · ${b.nickname}</span>
+        <span class="stats">
+          <span class="pill">컨 ${b.contact}</span>
+          <span class="pill">파 ${b.power}</span>
+          <span class="pill">주 ${b.speed}</span>
+          <span class="pill">번 ${b.bunt}</span>
+        </span>
+        <small class="muted">${b.note}</small>
+      </button>
+    `;
+  }).join("");
+
   return `
-    <div class="screen-panel">
+    <div class="screen-panel lineup-builder-panel">
       <div class="screen-title">
         <div>
-          <h2><span class="heading-logo">${teamLogoMarkup(team, "tiny-logo")}</span>2026 ${team.name} 타순 선택</h2>
-          <p>감독 ${team.manager} · 홈 ${team.stadium} · 9명을 순서대로 선택하세요.</p>
+          <h2><span class="heading-logo">${teamLogoMarkup(team, "tiny-logo")}</span>2026 ${team.name} 타순 구성</h2>
+          <p>감독 ${team.manager} · 홈 ${team.stadium} · 포지션 슬롯을 선택한 뒤 선수를 배정하세요.</p>
         </div>
-        <strong>${game.selectedLineup.length}/9</strong>
+        <strong>${filledCount}/9</strong>
       </div>
-      <p class="muted">${(team.notes || [`${team.name} 게임용 선수단`]).join(" / ")}</p>
-      <div class="selected-lineup">
-        ${game.selectedLineup.map((b, i) => `<span class="lineup-chip">${i + 1}. ${b.name}</span>`).join("")}
-      </div>
-      <div class="grid roster-grid">
-        ${team.batters
-          .map((b) => {
-            const selected = game.selectedLineup.some((p) => p.name === b.name);
-            return `
-              <button class="player-card ${selected ? "selected" : ""}" data-action="toggleBatter" data-batter="${b.name}">
-                <strong>${b.name}</strong>
-                <span class="muted">${b.position} · ${b.bats}타 · ${b.nickname}</span>
-                <span class="stats">
-                  <span class="pill">컨 ${b.contact}</span>
-                  <span class="pill">파 ${b.power}</span>
-                  <span class="pill">주 ${b.speed}</span>
-                  <span class="pill">번 ${b.bunt}</span>
-                </span>
-                <small class="muted">${b.note}</small>
-              </button>
-            `;
-          })
-          .join("")}
+      <div class="lineup-builder-grid">
+        <div class="lineup-slots">${slotsHtml}</div>
+        <div class="grid roster-grid lineup-pool">${poolHtml}</div>
       </div>
       <div class="panel-actions">
         <button data-action="changeTeam">팀 다시 선택</button>
-        <button data-action="defaultLineup">기본 타순</button>
-        <button class="primary" data-action="confirmLineup" ${game.selectedLineup.length === 9 ? "" : "disabled"}>라인업 확정</button>
+        <button data-action="defaultLineup">자동 채우기</button>
+        <button class="primary" data-action="confirmLineup" ${filledCount === 9 ? "" : "disabled"}>라인업 확정</button>
       </div>
     </div>
   `;
@@ -3712,12 +3812,22 @@ function fullscreenButton() {
   return `<button data-action="fullscreen">${document.fullscreenElement ? "전체화면 해제" : "전체화면"}</button>`;
 }
 
-function toggleBatter(name) {
+function assignBatterToSlot(name) {
   const found = currentUserTeam().batters.find((b) => b.name === name);
   if (!found) return;
-  const index = game.selectedLineup.findIndex((b) => b.name === name);
-  if (index >= 0) game.selectedLineup.splice(index, 1);
-  else if (game.selectedLineup.length < 9) game.selectedLineup.push(found);
+  const existingPos = LINEUP_POSITIONS.find((p) => game.lineupSlots[p]?.name === name);
+  if (!game.activeLineupSlot) {
+    if (existingPos) {
+      game.activeLineupSlot = existingPos;
+      delete game.lineupSlots[existingPos];
+    }
+    renderUI(true);
+    return;
+  }
+  if (existingPos) delete game.lineupSlots[existingPos];
+  game.lineupSlots[game.activeLineupSlot] = found;
+  const nextEmpty = LINEUP_POSITIONS.find((p) => !game.lineupSlots[p]);
+  game.activeLineupSlot = nextEmpty || null;
   renderUI(true);
 }
 
@@ -3776,11 +3886,9 @@ function loadRecord() {
 
 function loadSavedLineup(team = currentUserTeam()) {
   try {
-    const names = JSON.parse(localStorage.getItem(lineupStorageKey(team)));
-    if (Array.isArray(names) && names.length === 9) {
-      const lineup = names.map((name) => team.batters.find((b) => b.name === name)).filter(Boolean);
-      if (lineup.length === 9) return lineup;
-    }
+    const slots = loadSavedLineupSlots(team);
+    const lineup = LINEUP_POSITIONS.map((p) => slots[p]).filter(Boolean);
+    if (lineup.length === 9) return lineup;
   } catch {}
   return getDefaultLineup(team);
 }

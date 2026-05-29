@@ -637,6 +637,115 @@ canvas {
   background: #141414;
 }
 
+.lineup-builder-panel {
+  width: min(1100px, calc(100% - 36px));
+}
+
+.lineup-builder-grid {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.lineup-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.slot-row {
+  display: grid;
+  grid-template-columns: 22px 36px 52px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 3px solid #141414;
+  background: #fff4df;
+  cursor: pointer;
+  transition: background 0.08s, border-color 0.08s;
+  user-select: none;
+}
+
+.slot-row:hover {
+  background: #fff;
+}
+
+.slot-row.active {
+  border-color: var(--kia-red);
+  background: #fff0e8;
+  box-shadow: 3px 3px 0 var(--kia-red);
+}
+
+.slot-row.filled .slot-player {
+  font-weight: 850;
+  color: #141414;
+}
+
+.batting-order {
+  font-size: 12px;
+  font-weight: 950;
+  color: #8a7e76;
+  text-align: center;
+}
+
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 5px;
+  border: 2px solid #141414;
+  background: var(--kia-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.slot-row.active .pos-badge {
+  background: #141414;
+}
+
+.pos-kr {
+  font-size: 11px;
+  font-weight: 800;
+  color: #5c5650;
+}
+
+.slot-player {
+  font-size: 13px;
+  font-weight: 700;
+  color: #8a7e76;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-clear {
+  min-height: 24px;
+  padding: 2px 7px;
+  border-width: 2px;
+  box-shadow: 2px 2px 0 #141414;
+  font-size: 13px;
+  line-height: 1;
+  background: #fff4df;
+}
+
+.lineup-pool {
+  align-content: start;
+  max-height: 580px;
+  overflow-y: auto;
+}
+
+.player-card.assigned {
+  opacity: 0.38;
+}
+
+.player-card.ineligible {
+  opacity: 0.55;
+  background: #f5f0e8;
+}
+
 @media (max-width: 760px) {
   .app {
     padding: 8px;
@@ -659,5 +768,13 @@ canvas {
 
   .screen-panel {
     padding: 12px;
+  }
+
+  .lineup-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lineup-pool {
+    max-height: none;
   }
 }
