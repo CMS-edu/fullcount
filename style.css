@@ -242,6 +242,25 @@ button:disabled {
   font-size: 13px;
 }
 
+.invite-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 3px solid #050505;
+  background: #fff4df;
+  color: #141414;
+  font-weight: 900;
+}
+
+.invite-box span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #5c5650;
+}
+
 .eyebrow {
   color: #f4c24d;
   font-size: 12px;

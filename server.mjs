@@ -492,7 +492,7 @@ function handleRealtimeMessage(client, message) {
   if (data.type === "ready") {
     client.ready = Boolean(data.ready);
     broadcastRoomState(room);
-    if ([...room.clients].length === 2 && [...room.clients].every((player) => player.ready)) {
+    if (room.status !== "playing" && [...room.clients].length === 2 && [...room.clients].every((player) => player.ready)) {
       room.status = "playing";
       wsBroadcast(room, {
         type: "start-match",
@@ -525,7 +525,11 @@ function leaveRealtimeRoom(client) {
   if (room) {
     room.clients.delete(client);
     if (room.clients.size === 0) rooms.delete(room.id);
-    else broadcastRoomState(room);
+    else {
+      room.status = "waiting";
+      for (const player of room.clients) player.ready = false;
+      broadcastRoomState(room);
+    }
   }
   client.roomId = null;
   client.seat = null;

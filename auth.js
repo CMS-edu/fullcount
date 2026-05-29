@@ -6,6 +6,7 @@ const API_BASE = String(window.FULLCOUNT_API_BASE || "").replace(/\/$/, "");
 const WS_BASE = API_BASE
   ? API_BASE.replace(/^http/, "ws")
   : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+const initialRoomId = new URLSearchParams(location.search).get("room") || "";
 
 const authState = {
   user: null,
@@ -18,7 +19,7 @@ const authState = {
 const onlineState = {
   socket: null,
   connected: false,
-  roomId: "",
+  roomId: initialRoomId.trim().toUpperCase(),
   seat: null,
   status: "disconnected",
   players: [],
@@ -129,6 +130,7 @@ async function loadRecentMatches() {
 function onlineTemplate() {
   const teams = window.fullcountGame?.teams?.() || [];
   const teamOptions = teams.map((team) => `<option value="${escapeHtml(team.name)}">${escapeHtml(team.name)}</option>`).join("");
+  const invite = onlineState.roomId ? `${location.origin}${location.pathname}?room=${encodeURIComponent(onlineState.roomId)}` : "";
   const players = onlineState.players.length
     ? onlineState.players
         .map(
@@ -158,7 +160,13 @@ function onlineTemplate() {
         <button class="primary" type="button" data-online-action="create">방 만들기</button>
         <button type="button" data-online-action="join">입장</button>
         <button type="button" data-online-action="ready" ${onlineState.roomId ? "" : "disabled"}>준비</button>
+        <button type="button" data-online-action="copy" ${onlineState.roomId ? "" : "disabled"}>초대 링크</button>
       </form>
+      ${
+        invite
+          ? `<div class="invite-box"><strong>초대 링크</strong><span>${escapeHtml(invite)}</span></div>`
+          : ""
+      }
       <ol class="match-list">${players}</ol>
       ${log ? `<div class="online-log">${log}</div>` : ""}
       ${authState.message ? `<p class="auth-message">${escapeHtml(authState.message)}</p>` : ""}
@@ -181,6 +189,16 @@ function bindOnline() {
   form.querySelector("[data-online-action='ready']")?.addEventListener("click", () => {
     sendRealtime({ type: "ready", ready: true });
     addOnlineLog("준비 완료를 보냈어.");
+  });
+  form.querySelector("[data-online-action='copy']")?.addEventListener("click", async () => {
+    if (!onlineState.roomId) return;
+    const invite = `${location.origin}${location.pathname}?room=${encodeURIComponent(onlineState.roomId)}`;
+    try {
+      await navigator.clipboard?.writeText(invite);
+      addOnlineLog("초대 링크를 복사했어.");
+    } catch {
+      addOnlineLog(`초대 링크: ${invite}`);
+    }
   });
 }
 
@@ -223,6 +241,7 @@ function handleRealtime(data) {
     onlineState.roomId = data.roomId;
     onlineState.seat = data.seat;
     onlineState.players = data.players || [];
+    updateRoomUrl(data.roomId);
     addOnlineLog(`방 ${data.roomId} 입장 · P${data.seat}`);
   }
   if (data.type === "room-state") {
@@ -249,6 +268,13 @@ function handleRealtime(data) {
 function addOnlineLog(text) {
   onlineState.log.push(`${new Date().toLocaleTimeString("ko-KR")} ${text}`);
   if (onlineState.log.length > 20) onlineState.log.shift();
+}
+
+function updateRoomUrl(roomId) {
+  if (!roomId) return;
+  const url = new URL(location.href);
+  url.searchParams.set("room", roomId);
+  history.replaceState(null, "", url);
 }
 
 function accountTemplate() {

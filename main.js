@@ -556,12 +556,42 @@ function onlineControlSeat() {
   return game.half === "top" ? 1 : 2;
 }
 
+function onlineDefenseSeat() {
+  return game.half === "top" ? 2 : 1;
+}
+
 function canControlOnlineHalf() {
   return !isOnlinePvp() || !game.onlineSeat || game.onlineSeat === onlineControlSeat();
 }
 
 function canUseLocalControls() {
   return !isOnlinePvp() || canControlOnlineHalf();
+}
+
+function canPitchOnlineHalf() {
+  return isOnlinePvp() && (!game.onlineSeat || game.onlineSeat === onlineDefenseSeat());
+}
+
+function controlledPitcher() {
+  return isOnlinePvp() ? battingPitcher() : game.currentPitcher;
+}
+
+function controlledPitchingTeam() {
+  return isOnlinePvp() && game.half === "top" ? game.aiTeam : currentUserTeam();
+}
+
+function setControlledPitcher(newPitcher) {
+  const cloned = clonePitcher(newPitcher);
+  if (isOnlinePvp() && game.half === "top") game.aiPitcher = cloned;
+  else game.currentPitcher = cloned;
+  game.selectedPitch = cloned.pitches[0];
+}
+
+function onlineRoleText() {
+  if (!isOnlinePvp()) return "";
+  if (canControlOnlineHalf()) return `P${game.onlineSeat || onlineControlSeat()} 공격`;
+  if (canPitchOnlineHalf()) return `P${game.onlineSeat || onlineDefenseSeat()} 투구`;
+  return "관전";
 }
 
 function getOffenseTeam() {
@@ -728,6 +758,7 @@ function setupOnlineRealtime() {
   onlineRealtimeUnsubscribe = window.fullcountRealtime?.onGameEvent?.((message) => {
     const event = message.event || message;
     if (event.kind === "snapshot") applyOnlineSnapshot(event.snapshot);
+    if (event.kind === "pitch") applyOnlinePitch(event);
   });
 }
 
@@ -736,6 +767,32 @@ function broadcastOnlineSnapshot(reason) {
   window.fullcountRealtime?.sendGameEvent?.({
     kind: "snapshot",
     snapshot: exportOnlineSnapshot(reason),
+  });
+}
+
+function broadcastOnlinePitch() {
+  if (!isOnlinePvp() || !canPitchOnlineHalf() || game.applyingOnlineSnapshot) return;
+  window.fullcountRealtime?.sendGameEvent?.({
+    kind: "pitch",
+    roomId: game.onlineRoomId,
+    seq: ++game.onlineSeq,
+    inning: game.inning,
+    half: game.half,
+    userScore: game.userScore,
+    aiScore: game.aiScore,
+    outs: game.outs,
+    balls: game.balls,
+    strikes: game.strikes,
+    battingOrderIndex: game.battingOrderIndex,
+    aiBattingOrderIndex: game.aiBattingOrderIndex,
+    bases: {
+      first: game.bases.first?.name || null,
+      second: game.bases.second?.name || null,
+      third: game.bases.third?.name || null,
+    },
+    currentPitcher: pitcherSnapshot(game.currentPitcher),
+    aiPitcher: pitcherSnapshot(game.aiPitcher),
+    ball: serializeBallForOnline(game.ball),
   });
 }
 
@@ -765,6 +822,28 @@ function exportOnlineSnapshot(reason) {
     aiPitcher: pitcherSnapshot(game.aiPitcher),
     resultText: game.resultText,
     resultTimer: game.resultTimer,
+  };
+}
+
+function serializeBallForOnline(ball) {
+  return {
+    active: true,
+    mode: "batting",
+    x: ball.x,
+    y: ball.y,
+    prevX: ball.prevX,
+    prevY: ball.prevY,
+    start: ball.start,
+    end: ball.end,
+    t: 0,
+    duration: ball.duration,
+    inZone: ball.inZone,
+    mistake: ball.mistake,
+    decisionMade: false,
+    pitchType: ball.pitchType,
+    speed: ball.speed,
+    movement: ball.movement,
+    color: ball.color,
   };
 }
 
@@ -820,15 +899,74 @@ function applyOnlineSnapshot(snapshot) {
     game.resultDuration = game.resultTimer;
     game.resultNext = () => {
       if (canControlOnlineHalf()) prepareBattingPitch();
-      else setOnlineWaiting();
+      else setOnlineDefenseReady();
     };
   } else if (canControlOnlineHalf()) {
     prepareBattingPitch();
   } else {
-    setOnlineWaiting();
+    setOnlineDefenseReady();
   }
   game.applyingOnlineSnapshot = false;
   renderUI(true);
+}
+
+function applyOnlinePitch(event) {
+  if (!isOnlinePvp() || !event?.ball) return;
+  if (event.roomId && game.onlineRoomId && event.roomId !== game.onlineRoomId) return;
+  if (event.seq <= game.onlineAppliedSeq) return;
+  game.applyingOnlineSnapshot = true;
+  game.onlineAppliedSeq = event.seq;
+  game.inning = event.inning;
+  game.half = event.half;
+  game.userScore = event.userScore;
+  game.aiScore = event.aiScore;
+  game.outs = event.outs;
+  game.balls = event.balls;
+  game.strikes = event.strikes;
+  game.battingOrderIndex = event.battingOrderIndex;
+  game.aiBattingOrderIndex = event.aiBattingOrderIndex;
+  game.currentPitcher = hydratePitcherSnapshot(event.currentPitcher, currentUserTeam(), game.currentPitcher);
+  game.aiPitcher = hydratePitcherSnapshot(event.aiPitcher, game.aiTeam, game.aiPitcher);
+  game.bases = {
+    first: hydrateRunner(event.bases?.first),
+    second: hydrateRunner(event.bases?.second),
+    third: hydrateRunner(event.bases?.third),
+  };
+  syncCurrentMatchup();
+  game.state = "batting";
+  game.onlineWaiting = false;
+  game.hitBall = null;
+  game.throwBall = null;
+  resetFielderTargets(true);
+  game.ball = hydrateOnlineBall(event.ball);
+  game.pitchType = game.ball.pitchType;
+  game.pitchSpeed = game.ball.speed;
+  game.pitchMovement = game.ball.movement;
+  game.bat.contacted = false;
+  game.bat.attempted = false;
+  game.bat.held = false;
+  game.bat.angle = game.bat.neutral;
+  game.bat.spin = 0;
+  game.lastContact = null;
+  game.buntMode = false;
+  game.playPhase = canControlOnlineHalf() ? "온라인 타격" : "상대 타격 관전";
+  game.applyingOnlineSnapshot = false;
+  renderUI(true);
+}
+
+function hydrateOnlineBall(ball) {
+  return {
+    ...makeBall(),
+    ...ball,
+    active: true,
+    mode: "batting",
+    start: { ...ball.start },
+    end: { ...ball.end },
+    movement: { ...ball.movement },
+    t: 0,
+    prevX: ball.start?.x ?? FIELD.mound.x,
+    prevY: ball.start?.y ?? FIELD.mound.y,
+  };
 }
 
 function hydratePitcherSnapshot(snapshot, team, fallback) {
@@ -861,16 +999,28 @@ function resetBatState() {
   game.buntMode = false;
 }
 
-function setOnlineWaiting() {
+function setOnlineOffenseWaiting() {
   game.state = "batting";
   game.onlineWaiting = true;
-  game.ball = makeBall();
   game.hitBall = null;
   game.throwBall = null;
   game.pitchDelay = 999;
-  game.playPhase = `P${onlineControlSeat()} 공격 대기`;
   resetFielderTargets(true);
   resetBatState();
+  game.playPhase = "상대 투구 대기";
+  renderUI(true);
+}
+
+function setOnlineDefenseReady() {
+  game.state = "pitching";
+  game.onlineWaiting = false;
+  game.hitBall = null;
+  game.throwBall = null;
+  resetFielderTargets(true);
+  resetBatState();
+  const pitcherObj = controlledPitcher();
+  game.selectedPitch = pitcherObj?.pitches?.includes(game.selectedPitch) ? game.selectedPitch : pitcherObj?.pitches?.[0] || game.selectedPitch;
+  game.playPhase = "구종 선택";
   renderUI(true);
 }
 
@@ -917,11 +1067,22 @@ function updateIntro() {}
 
 function updateBatting(deltaTime) {
   if (isOnlinePvp() && !canControlOnlineHalf()) {
-    game.playPhase = `P${onlineControlSeat()} 공격 대기`;
-    game.ball.active = false;
+    if (!game.ball.active) {
+      game.playPhase = "투구 준비";
+      return;
+    }
+    updateBall(deltaTime);
+    if (game.ball.t >= 1) {
+      game.ball.active = false;
+      game.playPhase = "상대 판정 대기";
+    }
     return;
   }
   if (!game.ball.active) {
+    if (isOnlinePvp()) {
+      game.playPhase = "상대 투구 대기";
+      return;
+    }
     game.playPhase = "투구 대기";
     game.pitchDelay -= deltaTime;
     if (game.pitchDelay <= 0) startPitch(chooseAIPitch(), "batting");
@@ -1334,7 +1495,7 @@ function drawGameHUD() {
   ctx.fillText("PLAY", 480, 100);
   ctx.fillStyle = "#fff";
   ctx.font = "900 22px Segoe UI";
-  ctx.fillText(game.resultText || game.playPhase, 480, 120);
+  ctx.fillText(isOnlinePvp() ? `${onlineRoleText()} · ${game.resultText || game.playPhase}` : game.resultText || game.playPhase, 480, 120);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "#f4c24d";
@@ -1963,10 +2124,11 @@ function drawCenterHint(text) {
   ctx.restore();
 }
 
-function startPitch(pitchType, mode) {
-  if (mode === "batting" && !canUseLocalControls()) return;
+function startPitch(pitchType, mode, options = {}) {
+  if (mode === "batting" && !canUseLocalControls() && !options.onlineDefenseThrow) return;
   if (mode === "batting" && game.half === "top" && game.aiPitcher.stamina <= 0) autoChangeAIPitcher();
-  if (mode === "pitching" && game.currentPitcher.stamina <= 0) {
+  const pitcherObj = mode === "batting" ? battingPitcher() : game.currentPitcher;
+  if ((mode === "pitching" || options.onlineDefenseThrow) && pitcherObj.stamina <= 0) {
     game.warning = "투수 체력 0 - 교체 필요";
     showResult("투수 교체 필요!", 0.9, () => {
       game.state = "bullpen";
@@ -1975,7 +2137,6 @@ function startPitch(pitchType, mode) {
     return;
   }
 
-  const pitcherObj = mode === "batting" ? battingPitcher() : game.currentPitcher;
   const batterObj = mode === "batting" ? game.currentBatter : getAIBatter();
   pitchType = chooseFatiguedPitch(pitcherObj, pitchType);
   const fatigue = getFatigueLevel(pitcherObj);
@@ -2048,6 +2209,13 @@ function startPitch(pitchType, mode) {
   game.isPitching = true;
   game.playPhase = mode === "batting" ? "공 날아옴" : "투구 중";
   decreasePitcherStamina(pitcherObj);
+  if (options.onlineDefenseThrow) {
+    game.state = "batting";
+    game.onlineWaiting = false;
+    game.playPhase = "상대 타격 관전";
+    broadcastOnlinePitch();
+    renderUI(true);
+  }
 }
 
 function swingBat() {
@@ -2800,20 +2968,21 @@ function chooseAIBullpenPitcher(force = false) {
 }
 
 function changePitcher(newPitcher) {
-  game.currentPitcher = clonePitcher(newPitcher);
-  game.selectedPitch = game.currentPitcher.pitches[0];
+  setControlledPitcher(newPitcher);
   game.warning = "";
   localStorage.setItem("fullcount:selectedPitcher", newPitcher.name);
   showResult(`${newPitcher.name} 등판!`, 1.0, () => {
-    game.state = "pitching";
+    if (isOnlinePvp() && canPitchOnlineHalf()) setOnlineDefenseReady();
+    else game.state = "pitching";
     renderUI(true);
   });
 }
 
 function prepareBattingPitch() {
   if (game.half === "top") maybeAutoChangeAIPitcher();
-  if (isOnlinePvp() && !canControlOnlineHalf()) {
-    setOnlineWaiting();
+  if (isOnlinePvp()) {
+    if (canControlOnlineHalf()) setOnlineOffenseWaiting();
+    else setOnlineDefenseReady();
     return;
   }
   game.state = "batting";
@@ -2831,7 +3000,6 @@ function prepareBattingPitch() {
   game.bat.spin = 0;
   game.lastContact = null;
   game.buntMode = false;
-  broadcastOnlineSnapshot("ready");
 }
 
 function resumeHalf() {
@@ -3157,13 +3325,17 @@ function handleKeyDown(e) {
   }
   if (game.state === "pitching") {
     const n = Number(e.key);
+    const pitcherObj = controlledPitcher();
     if (n >= 1 && n <= 6) {
-      const p = game.currentPitcher.pitches[n - 1];
+      const p = pitcherObj?.pitches?.[n - 1];
       if (p) game.selectedPitch = p;
     }
     if (e.code === "Space") {
       e.preventDefault();
-      if (!game.ball.active) startPitch(game.selectedPitch, "pitching");
+      if (!game.ball.active) {
+        if (isOnlinePvp() && canPitchOnlineHalf()) startPitch(game.selectedPitch, "batting", { onlineDefenseThrow: true });
+        else startPitch(game.selectedPitch, "pitching");
+      }
     }
     if (e.key.toLowerCase() === "p") {
       game.state = "bullpen";
@@ -3194,19 +3366,25 @@ function handleMouseClick(e) {
   if (action === "selectPitcher") selectPitcher(currentUserTeam().starters.find((p) => p.name === e.target.closest("[data-pitcher]").dataset.pitcher));
   if (action === "selectBullpen") {
     const name = e.target.closest("[data-bullpen]").dataset.bullpen;
-    const found = Object.values(currentUserTeam().bullpenGroups).flat().find((p) => p.name === name);
+    const team = controlledPitchingTeam();
+    const found = Object.values(team.bullpenGroups || {}).flat().find((p) => p.name === name);
+    if (!found) return;
     changePitcher(found);
   }
   if (action === "pitch") {
     game.selectedPitch = e.target.closest("[data-pitch]").dataset.pitch;
   }
-  if (action === "throw" && game.state === "pitching" && !game.ball.active) startPitch(game.selectedPitch, "pitching");
+  if (action === "throw" && game.state === "pitching" && !game.ball.active) {
+    if (isOnlinePvp() && canPitchOnlineHalf()) startPitch(game.selectedPitch, "batting", { onlineDefenseThrow: true });
+    else startPitch(game.selectedPitch, "pitching");
+  }
   if (action === "bullpen") {
     game.state = "bullpen";
     renderUI(true);
   }
   if (action === "backPitching") {
-    game.state = "pitching";
+    if (isOnlinePvp() && canPitchOnlineHalf()) setOnlineDefenseReady();
+    else game.state = "pitching";
     renderUI(true);
   }
   if (action === "bunt") game.buntMode = true;
@@ -3292,6 +3470,7 @@ function renderUI(force = false) {
     paused: game.paused,
     warning: game.warning,
     score: [game.userScore, game.aiScore, game.inning, game.half, game.outs, game.balls, game.strikes],
+    online: [game.mode, game.onlineSeat, game.onlineWaiting, game.ball.active, onlineRoleText()],
   });
   if (!force && sig === game.uiSignature) return;
   game.uiSignature = sig;
@@ -3438,13 +3617,15 @@ function renderPitcherSelect() {
 }
 
 function renderBullpen() {
-  const groups = currentUserTeam().bullpenGroups;
+  const team = controlledPitchingTeam();
+  const pitcherObj = controlledPitcher();
+  const groups = team.bullpenGroups || makeOpponentBullpenGroups(team.bullpen || []);
   return `
     <div class="screen-panel">
       <div class="screen-title">
         <div>
           <h2>투수 교체</h2>
-          <p>${teamLogoMarkup(currentUserTeam(), "inline-logo")} 현재 투수: ${game.currentPitcher.name} · 체력 ${Math.round(game.currentPitcher.stamina)}</p>
+          <p>${teamLogoMarkup(team, "inline-logo")} 현재 투수: ${pitcherObj.name} · 체력 ${Math.round(pitcherObj.stamina)}</p>
         </div>
         <button data-action="backPitching">돌아가기</button>
       </div>
@@ -3482,28 +3663,34 @@ function renderPitcherCard(p, action, dataName) {
 
 function renderActionBar() {
   if (game.state === "batting") {
+    const onlineStatus = isOnlinePvp() ? `<span class="pill">${onlineRoleText()}</span>` : "";
+    const waiting = isOnlinePvp() && (!canControlOnlineHalf() || !game.ball.active);
     return `
       <div class="action-left">
         <span class="status-text">공격 · ${game.currentBatter.name}</span>
+        ${onlineStatus}
         <span class="kbd">SPACE</span>
-        <span>누르고 있으면 배트 회전</span>
+        <span>${waiting ? "상대 투구/판정 대기" : "누르고 있으면 배트 회전"}</span>
       </div>
       <div class="action-right">
-        <button class="primary" data-action="holdSwing">스윙 홀드</button>
-        <button data-action="bunt" class="${game.buntMode ? "selected" : ""}">번트</button>
-        <button data-action="steal">도루</button>
+        <button class="primary" data-action="holdSwing" ${waiting ? "disabled" : ""}>스윙 홀드</button>
+        <button data-action="bunt" class="${game.buntMode ? "selected" : ""}" ${waiting ? "disabled" : ""}>번트</button>
+        <button data-action="steal" ${waiting ? "disabled" : ""}>도루</button>
         ${fullscreenButton()}
       </div>
     `;
   }
   if (game.state === "pitching") {
+    const pitcherObj = controlledPitcher();
+    const onlineStatus = isOnlinePvp() ? `<span class="pill">${onlineRoleText()}</span>` : "";
     return `
       <div class="action-left">
-        <span class="status-text">수비 · ${game.currentPitcher.name} 체력 ${Math.round(game.currentPitcher.stamina)}</span>
+        <span class="status-text">수비 · ${pitcherObj.name} 체력 ${Math.round(pitcherObj.stamina)}</span>
+        ${onlineStatus}
         ${game.warning ? `<span class="pill">${game.warning}</span>` : ""}
       </div>
       <div class="pitch-buttons">
-        ${game.currentPitcher.pitches
+        ${pitcherObj.pitches
           .map((p, i) => `<button data-action="pitch" data-pitch="${p}" class="${game.selectedPitch === p ? "selected" : ""}"><span class="kbd">${i + 1}</span> ${p}</button>`)
           .join("")}
         <button class="primary" data-action="throw">투구</button>
