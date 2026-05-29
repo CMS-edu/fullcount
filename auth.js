@@ -13,6 +13,7 @@ const authState = {
   matches: [],
   view: "game",
   message: "",
+  storage: "postgres",
   settings: loadSettings(),
 };
 
@@ -84,6 +85,7 @@ async function initAppShell() {
   try {
     const data = await api("/api/auth/me");
     authState.user = data.user;
+    authState.storage = data.storage || "postgres";
     if (authState.user) await loadRecentMatches();
   } catch {
     authState.user = null;
@@ -307,8 +309,16 @@ function accountTemplate() {
         <button class="primary" type="submit">계정 저장</button>
         <button type="button" id="logoutButton">로그아웃</button>
       </form>
+      ${memoryWarningBanner()}
       ${authState.message ? `<p class="auth-message">${escapeHtml(authState.message)}</p>` : ""}
     </div>`;
+}
+
+function memoryWarningBanner() {
+  if (authState.storage !== "memory") return "";
+  return `<p class="auth-message" style="border-left-color:#f4c24d;background:#2a1e00;color:#f4c24d">
+    ⚠️ 데이터베이스 미연결 — 계정 정보가 서버 재시작 시 사라집니다. Render 환경변수에 <strong>DATABASE_URL</strong>을 설정하세요.
+  </p>`;
 }
 
 function loginTemplate() {
@@ -330,6 +340,7 @@ function loginTemplate() {
         <label>응원팀<input name="favoriteTeam" value="KIA" /></label>
         <button type="submit">회원가입</button>
       </form>
+      ${memoryWarningBanner()}
       ${authState.message ? `<p class="auth-message">${escapeHtml(authState.message)}</p>` : ""}
     </div>`;
 }

@@ -167,7 +167,7 @@ async function handleApi(req, res, url) {
   }
   if (req.method === "GET" && url.pathname === "/api/auth/me") {
     const user = await requireUser(req);
-    sendJson(res, 200, { user: user ? publicUser(user) : null });
+    sendJson(res, 200, { user: user ? publicUser(user) : null, storage: dbReady ? "postgres" : "memory" });
     return;
   }
   if (req.method === "PATCH" && url.pathname === "/api/account") {
