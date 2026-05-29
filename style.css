@@ -414,6 +414,171 @@ button:disabled {
   color: #5c5650;
 }
 
+.inning-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 4px;
+  align-items: center;
+}
+
+.inning-pick-row {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.inning-pick {
+  padding: 8px 16px;
+  border: 3px solid #050505;
+  background: #fff4df;
+  color: #141414;
+  font-family: inherit;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #050505;
+  transition: transform 0.08s;
+}
+
+.inning-pick:hover {
+  transform: translate(-1px, -1px);
+}
+
+.inning-pick.active {
+  background: #d71920;
+  color: #fff4df;
+  box-shadow: 3px 3px 0 #050505, inset 0 0 0 2px #fff4df;
+}
+
+.lg-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.lg-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border: 3px solid #050505;
+  background: #fff4df;
+  color: #141414;
+}
+
+.lg-list-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.lg-list-row strong {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.lg-list-row .muted {
+  font-size: 12px;
+  color: #5c5650;
+}
+
+.lg-list-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.lg-list-actions .danger {
+  background: #21130a;
+  color: #ffb4b4;
+}
+
+.lg-create {
+  display: grid;
+  gap: 10px;
+  border-top: 3px dashed #444;
+  padding-top: 16px;
+}
+
+.lg-create h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.lg-team-pickset {
+  border: 2px solid #050505;
+  padding: 10px 12px;
+  background: #1a1a1a;
+}
+
+.lg-team-pickset legend {
+  font-weight: 900;
+  color: #f4c24d;
+  padding: 0 6px;
+}
+
+.lg-team-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 10px 4px 0;
+  font-weight: 800;
+  color: #f0ece4;
+}
+
+.lg-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.lg-sched-toolbar {
+  margin-bottom: 8px;
+  padding: 10px;
+  border-bottom: 3px solid #050505;
+  background: #fff4df;
+}
+
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.award-card {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 14px;
+  border: 3px solid #050505;
+  background: #fff4df;
+  color: #141414;
+  text-align: center;
+}
+
+.award-card .eyebrow {
+  color: #d71920;
+  margin: 0;
+  font-size: 12px;
+}
+
+.award-card h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.award-card .award-value {
+  margin-top: 4px;
+  font-weight: 900;
+  color: #2e6a3a;
+}
+
+.award-card .rec-photo {
+  width: 64px;
+  height: 64px;
+}
+
 .game-shell {
   position: relative;
   overflow: hidden;

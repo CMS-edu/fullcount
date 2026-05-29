@@ -265,6 +265,8 @@ const game = {
   pitchCounts: {},
   matchBatterStats: {},
   matchPitcherStats: {},
+  maxInnings: 9,
+  leagueContext: null,
 };
 
 let lastTime = 0;
@@ -734,6 +736,7 @@ function orderedLineupPositions(team = currentUserTeam()) {
 function init() {
   loadRecord();
   preloadTeamLogos();
+  game.maxInnings = loadMaxInningsPref();
   setupTeams();
   resetGame(false);
   bindInput();
@@ -741,6 +744,19 @@ function init() {
   if (quick) quickStart(quick);
   renderUI(true);
   requestAnimationFrame(gameLoop);
+}
+
+function loadMaxInningsPref() {
+  const v = Number(localStorage.getItem("fullcount:maxInnings"));
+  return [1, 3, 5, 7, 9].includes(v) ? v : 9;
+}
+
+function setMaxInnings(value) {
+  const v = Number(value);
+  if (![1, 3, 5, 7, 9].includes(v)) return;
+  game.maxInnings = v;
+  localStorage.setItem("fullcount:maxInnings", String(v));
+  renderUI(true);
 }
 
 function resetGame(toIntro = true) {
@@ -815,7 +831,7 @@ function incrementPitchCount(pitcherName) {
 
 function ensureBatterStat(name, teamName) {
   if (!game.matchBatterStats[name]) {
-    game.matchBatterStats[name] = { team: teamName || "", AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0 };
+    game.matchBatterStats[name] = { team: teamName || "", AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0, TB: 0, SF: 0 };
   }
   return game.matchBatterStats[name];
 }
@@ -825,6 +841,14 @@ function ensurePitcherStat(name, teamName) {
     game.matchPitcherStats[name] = { team: teamName || "", outs: 0, H: 0, HR: 0, BB: 0, SO: 0, ER: 0, pitches: 0 };
   }
   return game.matchPitcherStats[name];
+}
+
+function totalBasesFor(result) {
+  if (result === "1루타" || result === "번트안타") return 1;
+  if (result === "2루타") return 2;
+  if (result === "3루타") return 3;
+  if (result === "홈런" || result === "만루홈런") return 4;
+  return 0;
 }
 
 function offenseTeamName() {
@@ -848,6 +872,7 @@ function recordBattingOutcome(result, runsScored = 0) {
   }
   if (hitResults.includes(result)) {
     bs.H += 1;
+    bs.TB += totalBasesFor(result);
     if (ps) ps.H += 1;
     if (result === "2루타") bs["2B"] += 1;
     if (result === "3루타") bs["3B"] += 1;
@@ -856,6 +881,9 @@ function recordBattingOutcome(result, runsScored = 0) {
       if (ps) ps.HR += 1;
     }
     recordHit();
+  }
+  if (result === "희생플라이") {
+    bs.SF += 1;
   }
   if (runsScored > 0) {
     bs.RBI += runsScored;
@@ -1960,8 +1988,8 @@ function drawInningStrip() {
   const op = game.aiTeam;
   const stripY = 142;
   const stripH = 28;
-  const inningsToShow = Math.max(9, game.inning);
-  const colW = 19;
+  const inningsToShow = Math.max(getMaxInnings(), game.inning);
+  const colW = inningsToShow <= 3 ? 28 : inningsToShow <= 5 ? 24 : 19;
   const labelW = 54;
   const tailW = 64;
   const totalW = labelW + colW * inningsToShow + tailW;
@@ -3456,9 +3484,19 @@ function switchHalfInning(forceBottom = false) {
   }
 }
 
+function getMaxInnings() {
+  const v = Number(game.maxInnings);
+  return [1, 3, 5, 7, 9].includes(v) ? v : 9;
+}
+
+function getExtraInningLimit() {
+  return getMaxInnings() + Math.min(2, Math.max(1, Math.floor(getMaxInnings() / 3)));
+}
+
 function checkGameEnd() {
-  if (game.inning <= 9) return false;
-  if (game.userScore === game.aiScore && game.inning <= 10) return false;
+  const max = getMaxInnings();
+  if (game.inning <= max) return false;
+  if (game.userScore === game.aiScore && game.inning <= getExtraInningLimit()) return false;
   game.state = "gameOver";
   saveRecord();
   broadcastOnlineSnapshot("gameOver");
@@ -4146,6 +4184,10 @@ function handleMouseClick(e) {
     renderUI(true);
   }
   if (action === "fullscreen") toggleFullscreen();
+  if (action === "setInnings") {
+    const innings = Number(e.target.closest("[data-innings]")?.dataset.innings);
+    setMaxInnings(innings);
+  }
 }
 
 function handleMouseDown(e) {
@@ -4394,6 +4436,8 @@ function renderIntro() {
   const lineupOk = game.selectedLineup.length === 9;
   const pitcherOk = !!pitcher;
   const ready = lineupOk && pitcherOk;
+  const cur = getMaxInnings();
+  const inningChoices = [1, 3, 5, 7, 9].map((n) => `<button class="inning-pick${cur === n ? " active" : ""}" data-action="setInnings" data-innings="${n}">${n}이닝</button>`).join("");
   return `
     <div class="screen-panel intro-panel">
       <h1 style="font-size:clamp(40px,8vw,80px);line-height:0.95;margin:0 0 14px">풀카운트</h1>
@@ -4404,9 +4448,13 @@ function renderIntro() {
       <p class="muted" style="margin:0 0 6px">
         선발: ${pitcher?.name || "—"} &nbsp;·&nbsp; 라인업: ${game.selectedLineup.length}/9명
       </p>
+      <div class="inning-picker">
+        <span class="eyebrow">경기 이닝 수</span>
+        <div class="inning-pick-row">${inningChoices}</div>
+      </div>
       ${!ready ? `<p style="font-size:13px;font-weight:800;color:var(--kia-red);margin:0 0 10px">「내 팀」 탭에서 라인업과 선발을 설정하세요.</p>` : ""}
       <div class="panel-actions" style="justify-content:center;margin-top:14px">
-        <button class="primary" data-action="게임시작" ${ready ? "" : "disabled"}>경기 시작</button>
+        <button class="primary" data-action="게임시작" ${ready ? "" : "disabled"}>${cur}이닝 경기 시작</button>
       </div>
     </div>
   `;
@@ -4681,6 +4729,7 @@ function saveRecord() {
   };
   localStorage.setItem("fullcount:record", JSON.stringify(game.record));
   saveSeasonStats();
+  recordLeagueMatchResult();
   window.fullcountAuth?.saveMatch?.({
     userTeam: currentUserTeam().name,
     opponentTeam: game.aiTeam.name,
@@ -4700,9 +4749,12 @@ function loadSeasonStats() {
 
 function saveSeasonStats() {
   const season = loadSeasonStats();
+  const userWon = game.userScore > game.aiScore;
+  const userTeamName = currentUserTeam().name;
+  const aiTeamName = game.aiTeam?.name || "AI";
   // batter stats
   for (const [name, m] of Object.entries(game.matchBatterStats)) {
-    if (!season.batters[name]) season.batters[name] = { team: m.team, AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0, G: 0 };
+    if (!season.batters[name]) season.batters[name] = { team: m.team, AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0, TB: 0, SF: 0, G: 0 };
     const s = season.batters[name];
     s.team = m.team || s.team;
     s.AB += m.AB || 0;
@@ -4714,11 +4766,13 @@ function saveSeasonStats() {
     s.SO += m.SO || 0;
     s["2B"] += m["2B"] || 0;
     s["3B"] += m["3B"] || 0;
+    s.TB += m.TB || 0;
+    s.SF += m.SF || 0;
     s.G += 1;
   }
   // pitcher stats
   for (const [name, m] of Object.entries(game.matchPitcherStats)) {
-    if (!season.pitchers[name]) season.pitchers[name] = { team: m.team, outs: 0, H: 0, HR: 0, BB: 0, SO: 0, ER: 0, pitches: 0, G: 0, W: 0, L: 0 };
+    if (!season.pitchers[name]) season.pitchers[name] = { team: m.team, outs: 0, H: 0, HR: 0, BB: 0, SO: 0, ER: 0, pitches: 0, G: 0, W: 0, L: 0, S: 0 };
     const s = season.pitchers[name];
     s.team = m.team || s.team;
     s.outs += m.outs || 0;
@@ -4729,6 +4783,11 @@ function saveSeasonStats() {
     s.ER += m.ER || 0;
     s.pitches += m.pitches || 0;
     s.G += 1;
+    const isUserTeam = s.team === userTeamName;
+    const teamWon = isUserTeam ? userWon : !userWon && game.userScore !== game.aiScore;
+    if (game.userScore !== game.aiScore) {
+      if (teamWon) s.W += 1; else s.L += 1;
+    }
   }
   // team standings — both sides count
   const userName = currentUserTeam().name;
@@ -4862,10 +4921,91 @@ window.render_game_to_text = () =>
     result: game.resultText,
   });
 
+function startLeagueMatch({ leagueId, matchIdx, home, away, innings }) {
+  const userTeamName = currentUserTeam().name;
+  // user always controls userTeamName side; opponent is whichever team is not user's
+  const opponentName = home === userTeamName ? away : home;
+  const opponent = getTeamByName(opponentName);
+  if (!opponent) {
+    console.warn("league match: opponent team not found", opponentName);
+    return;
+  }
+  game.maxInnings = [1, 3, 5, 7, 9].includes(Number(innings)) ? Number(innings) : 9;
+  game.leagueContext = { leagueId, matchIdx, home, away };
+  game.aiTeam = opponent;
+  game.aiPitcher = clonePitcher(selectOpponentStarter());
+  resetGame(false);
+  startGame();
+}
+
+function recordLeagueMatchResult() {
+  const ctx = game.leagueContext;
+  if (!ctx) return;
+  try {
+    const leagues = JSON.parse(localStorage.getItem("fullcount:leagues")) || [];
+    const idx = leagues.findIndex((l) => l.id === ctx.leagueId);
+    if (idx < 0) return;
+    const league = leagues[idx];
+    const m = league.schedule[ctx.matchIdx];
+    if (!m) return;
+    const userTeamName = currentUserTeam().name;
+    const userIsHome = m.home === userTeamName;
+    const homeScore = userIsHome ? game.userScore : game.aiScore;
+    const awayScore = userIsHome ? game.aiScore : game.userScore;
+    m.result = { home: m.home, away: m.away, homeScore, awayScore, date: new Date().toISOString() };
+    const hs = league.standings[m.home];
+    const as = league.standings[m.away];
+    if (hs && as) {
+      hs.G += 1; as.G += 1;
+      hs.RS += homeScore; hs.RA += awayScore;
+      as.RS += awayScore; as.RA += homeScore;
+      if (homeScore > awayScore) { hs.W += 1; as.L += 1; }
+      else if (homeScore < awayScore) { hs.L += 1; as.W += 1; }
+      else { hs.T += 1; as.T += 1; }
+    }
+    // merge per-match stats
+    league.batters = league.batters || {};
+    league.pitchers = league.pitchers || {};
+    for (const [name, mb] of Object.entries(game.matchBatterStats)) {
+      const s = league.batters[name] = league.batters[name] || { team: mb.team, AB:0,H:0,HR:0,RBI:0,R:0,BB:0,SO:0,"2B":0,"3B":0,TB:0,SF:0,G:0 };
+      s.team = mb.team || s.team;
+      s.AB += mb.AB||0; s.H += mb.H||0; s.HR += mb.HR||0; s.RBI += mb.RBI||0; s.R += mb.R||0;
+      s.BB += mb.BB||0; s.SO += mb.SO||0; s["2B"] += mb["2B"]||0; s["3B"] += mb["3B"]||0;
+      s.TB += mb.TB||0; s.SF += mb.SF||0; s.G += 1;
+    }
+    for (const [name, mp] of Object.entries(game.matchPitcherStats)) {
+      const s = league.pitchers[name] = league.pitchers[name] || { team: mp.team, outs:0,H:0,HR:0,BB:0,SO:0,ER:0,pitches:0,G:0,W:0,L:0 };
+      s.team = mp.team || s.team;
+      s.outs += mp.outs||0; s.H += mp.H||0; s.HR += mp.HR||0; s.BB += mp.BB||0;
+      s.SO += mp.SO||0; s.ER += mp.ER||0; s.pitches += mp.pitches||0; s.G += 1;
+      const isUserTeam = s.team === userTeamName;
+      const userWon = game.userScore > game.aiScore;
+      if (game.userScore !== game.aiScore) {
+        const teamWon = isUserTeam ? userWon : !userWon;
+        if (teamWon) s.W += 1; else s.L += 1;
+      }
+    }
+    localStorage.setItem("fullcount:leagues", JSON.stringify(leagues));
+  } catch (e) {
+    console.warn("league record failed", e);
+  }
+  game.leagueContext = null;
+}
+
 window.fullcountGame = {
   teams: () => playableTeams.map((team) => ({ name: team.name, shortName: team.shortName || team.name })),
   startOnlinePvp,
   startLocalPvp: (teamA, teamB) => startOnlinePvp({ roomId: "LOCAL", seat: 1, teamA, teamB }),
+  startLeagueMatch,
+  getTeamRoster(teamName) {
+    const team = getTeamByName(teamName);
+    if (!team) return null;
+    return {
+      batters: team.batters.slice(0, 9).map((b) => ({ name: b.name, power: b.power, contact: b.contact, speed: b.speed })),
+      starter: team.starters[0]?.name || null,
+      pitchers: team.starters.slice(0, 1).map((p) => ({ name: p.name, velocity: p.velocity, control: p.control, breaking: p.breaking })),
+    };
+  },
   state: () => JSON.parse(window.render_game_to_text()),
   renderMyTeamPanel,
   prepareOnlineLineup,
