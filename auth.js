@@ -413,6 +413,7 @@ function recordsTemplate() {
 }
 
 function settingsTemplate() {
+  const d = authState.settings.difficulty || "normal";
   return `
     <div class="auth-card">
       <p class="eyebrow">SETTINGS</p>
@@ -421,6 +422,15 @@ function settingsTemplate() {
         <label><input type="checkbox" name="showImpact" ${authState.settings.showImpact ? "checked" : ""} /> 임팩트 흔들림</label>
         <label><input type="checkbox" name="autoFullscreenHint" ${authState.settings.autoFullscreenHint ? "checked" : ""} /> 전체화면 안내 유지</label>
         <label><input type="checkbox" name="reducedMotion" ${authState.settings.reducedMotion ? "checked" : ""} /> 연출 줄이기</label>
+        <label style="grid-column:1/-1">
+          AI 난이도
+          <select name="difficulty" style="margin-left:10px;min-height:36px;border:2px solid #050505;background:#fffaf4;font:inherit;font-weight:800;padding:4px 8px">
+            <option value="easy"   ${d === "easy"   ? "selected" : ""}>쉬움 — AI가 많이 실수</option>
+            <option value="normal" ${d === "normal" ? "selected" : ""}>보통 — 기본값</option>
+            <option value="hard"   ${d === "hard"   ? "selected" : ""}>어려움 — AI가 잘 침</option>
+            <option value="expert" ${d === "expert" ? "selected" : ""}>극한 — AI가 거의 못 막음</option>
+          </select>
+        </label>
         <button class="primary" type="submit">저장</button>
       </form>
       ${authState.message ? `<p class="auth-message">${escapeHtml(authState.message)}</p>` : ""}
@@ -435,6 +445,7 @@ function bindSettings() {
       showImpact: data.has("showImpact"),
       autoFullscreenHint: data.has("autoFullscreenHint"),
       reducedMotion: data.has("reducedMotion"),
+      difficulty: data.get("difficulty") || "normal",
     };
     localStorage.setItem("fullcount:settings", JSON.stringify(authState.settings));
     authState.message = "설정 저장 완료.";
@@ -451,7 +462,7 @@ function loadSettings() {
 }
 
 function defaultSettings() {
-  return { showImpact: true, autoFullscreenHint: true, reducedMotion: false };
+  return { showImpact: true, autoFullscreenHint: true, reducedMotion: false, difficulty: "normal" };
 }
 
 async function api(path, options = {}) {

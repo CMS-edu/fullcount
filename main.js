@@ -798,6 +798,7 @@ function startGame() {
   game.state = "batting";
   game.playPhase = "투구 대기";
   game.half = "top";
+  game.aiSwingPoint = getAIDiffMod().timing;
   game.aiPitcher = game.aiPitcher ? clonePitcher(game.aiPitcher) : clonePitcher(selectOpponentStarter());
   resetCount();
   syncCurrentMatchup();
@@ -1195,6 +1196,15 @@ function updateBatting(deltaTime) {
   }
   updateBall(deltaTime);
   if (game.ball.active && game.bat.held) game.bat.attempted = true;
+  // 번트 모드: 공이 타격 존에 들어오면 자동 컨택
+  if (game.ball.active && game.buntMode && !game.bat.contacted && game.ball.t > 0.58) {
+    if (getContactReach() > 0.12) {
+      game.bat.held = true;
+      game.bat.attempted = true;
+      game.swingPower = 0;
+      if (isSwingInContactWindow()) swingBat();
+    }
+  }
   if (game.ball.active && game.bat.held && !game.bat.contacted && isSwingInContactWindow()) {
     swingBat();
   }
@@ -2824,8 +2834,9 @@ function resolvePitchingResult(aiSwung) {
   const timingDiff = Math.abs(ball.t - game.aiSwingPoint) * 100;
   const fatigue = getFatigueLevel(game.currentPitcher);
   const pitchDifficulty = ball.speed * 0.17 + Math.abs(ball.movement.x) * 0.34 + game.currentPitcher.breaking * 0.26 - fatigue * 34;
-  const contactScore = batter.contact + batter.eye * 0.18 + randomInt(-18, 18) - pitchDifficulty * 0.4;
-  const powerScore = batter.power + batter.launch * 0.12 + randomInt(-15, 15) - pitchDifficulty * 0.2;
+  const diffMod = getAIDiffMod();
+  const contactScore = batter.contact + batter.eye * 0.18 + randomInt(-18, 18) - pitchDifficulty * 0.4 + diffMod.contact;
+  const powerScore = batter.power + batter.launch * 0.12 + randomInt(-15, 15) - pitchDifficulty * 0.2 + diffMod.power;
   game.ball.active = false;
 
   if (timingDiff > 44 || contactScore < 42) {
@@ -3038,8 +3049,8 @@ function chooseThrowOutPlan(plans, battedBall, result) {
     .map((plan) => {
       const basePoint = getRunnerBasePoint(plan.toBase);
       const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
-      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 220 : 285;
-      const throwDuration = Math.max(0.9, throwDistance / throwSpeed + 0.42 + Math.random() * 0.18);
+      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 400 : 520;
+      const throwDuration = Math.max(0.38, throwDistance / throwSpeed + 0.13 + Math.random() * 0.10);
       const throwArrival = defense.fieldTime + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
@@ -3093,7 +3104,7 @@ function queueOutThrow(battedBall, toBase, extraDelay = 0) {
     from: { ...defense.fieldPoint },
     to,
     delay: defense.fieldTime + extraDelay,
-    duration: Math.max(0.9, distance / 285 + 0.42 + Math.random() * 0.18),
+    duration: Math.max(0.38, distance / 520 + 0.13 + Math.random() * 0.10),
     timer: 0,
   };
 }
@@ -3234,13 +3245,26 @@ function chooseAIPitch() {
   return pitches[randomInt(0, pitches.length - 1)];
 }
 
+function getDifficulty() {
+  try { return JSON.parse(localStorage.getItem("fullcount:settings"))?.difficulty || "normal"; } catch { return "normal"; }
+}
+
+function getAIDiffMod() {
+  const d = getDifficulty();
+  if (d === "easy")   return { swing: -0.18, contact: -24, power: -22, timing: 0.66 };
+  if (d === "hard")   return { swing:  0.12, contact:  16, power:  14, timing: 0.84 };
+  if (d === "expert") return { swing:  0.22, contact:  28, power:  26, timing: 0.89 };
+  return                     { swing:  0,    contact:   0, power:   0, timing: 0.78 };
+}
+
 function chooseAISwing() {
   const batter = getAIBatter();
   const zoneBias = game.ball.inZone ? 0.34 : -0.26;
   const countBias = game.strikes >= 2 ? 0.18 : game.balls >= 3 ? -0.08 : 0;
   const fatigue = getFatigueLevel(game.currentPitcher);
   const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 100 + Math.abs(game.pitchMovement.x) / 170 - fatigue * 0.22;
-  const chance = clamp(0.27 + batter.contact / 260 + batter.eye / 420 + zoneBias + countBias - difficulty, 0.06, 0.9);
+  const mod = getAIDiffMod();
+  const chance = clamp(0.27 + batter.contact / 260 + batter.eye / 420 + zoneBias + countBias - difficulty + mod.swing, 0.06, 0.9);
   return Math.random() < chance;
 }
 
@@ -3903,15 +3927,48 @@ function toggleFullscreen() {
 function trySteal() {
   if (!canUseLocalControls()) return;
   if (game.state !== "batting" || !game.bases.first) return showResult("도루할 1루 주자 없음", 0.8, resumeHalf);
-  const runner = game.bases.first;
-  const success = Math.random() < clamp(0.28 + runner.speed / 145, 0.35, 0.86);
-  if (success) {
-    animateRunner(runner, "first", "second");
-    game.bases.second = runner;
+  const runner1 = game.bases.first;
+  const runner2 = game.bases.second;
+
+  // 2루·3루 모두 주자 있으면 도루 불가
+  if (runner2 && game.bases.third) return showResult("도루 불가 (만루)", 0.8, resumeHalf);
+
+  const success1 = Math.random() < clamp(0.28 + runner1.speed / 145, 0.35, 0.86);
+
+  if (runner2) {
+    // 더블 도루: 1루→2루, 2루→3루 동시 시도
+    const success2 = Math.random() < clamp(0.22 + runner2.speed / 160, 0.28, 0.78);
+    if (success1 && success2) {
+      animateRunner(runner2, "second", "third");
+      animateRunner(runner1, "first", "second");
+      game.bases.third = runner2;
+      game.bases.second = runner1;
+      game.bases.first = null;
+      showResult("더블 도루!", 1.0, resumeHalf);
+    } else if (success1) {
+      // 2루 주자 아웃, 1루 주자만 진루
+      animateRunner(runner2, "second", "third");
+      animateRunner(runner1, "first", "second");
+      game.bases.second = runner1;
+      game.bases.first = null;
+      recordOut(1, "더블 도루 — 2루 주자 아웃");
+    } else {
+      // 1루 주자 아웃
+      animateRunner(runner1, "first", "second");
+      game.bases.first = null;
+      recordOut(1, "도루 실패!");
+    }
+    return;
+  }
+
+  // 일반 도루 (2루 비어있음)
+  if (success1) {
+    animateRunner(runner1, "first", "second");
+    game.bases.second = runner1;
     game.bases.first = null;
     showResult("도루 성공!", 0.9, resumeHalf);
   } else {
-    animateRunner(runner, "first", "second");
+    animateRunner(runner1, "first", "second");
     game.bases.first = null;
     recordOut(1, "도루 실패!");
   }
