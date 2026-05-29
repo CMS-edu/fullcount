@@ -637,6 +637,21 @@ canvas {
   background: #141414;
 }
 
+.my-team-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.mt-section {
+  padding: 16px 0;
+  border-bottom: 2px solid #2a2a2a;
+}
+
+.mt-section:last-child {
+  border-bottom: none;
+}
+
 .lineup-builder-panel {
   width: min(1100px, calc(100% - 36px));
 }

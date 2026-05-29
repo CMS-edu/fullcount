@@ -292,6 +292,7 @@ const game = {
 let lastTime = 0;
 const logoImages = new Map();
 let onlineRealtimeUnsubscribe = null;
+const myTeamEdit = { activeSlot: null };
 
 function batter(name, position, bats, contact, power, speed, bunt, nickname, note) {
   const seed = nameSeed(name);
@@ -3523,6 +3524,76 @@ function handleMouseClick(e) {
     resetGame(true);
     setupTeams();
   }
+  if (action === "게임시작" || action === "start") {
+    game.aiTeam = null;
+    resetGame(false);
+    if (!game.currentPitcher) game.currentPitcher = clonePitcher(currentUserTeam().starters[0]);
+    if (game.selectedLineup.length < 9) game.selectedLineup = getDefaultLineup();
+    startGame();
+  }
+  // ── 내 팀 탭 핸들러 ──────────────────────────────────────────────
+  if (action === "mt-selectTeam") {
+    const name = e.target.closest("[data-team]")?.dataset.team;
+    if (!name) return;
+    localStorage.setItem("fullcount:userTeam", name);
+    game.userTeam = getTeamByName(name);
+    myTeamEdit.activeSlot = null;
+    window.fullcountAuth?.refreshMyTeam?.();
+  }
+  if (action === "mt-selectSlot") {
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    if (slot && LINEUP_POSITIONS.includes(slot)) {
+      myTeamEdit.activeSlot = myTeamEdit.activeSlot === slot ? null : slot;
+      window.fullcountAuth?.refreshMyTeam?.();
+    }
+  }
+  if (action === "mt-clearSlot") {
+    e.stopPropagation();
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    if (!slot) return;
+    const team = loadSavedTeam();
+    const slots = loadSavedLineupSlots(team);
+    if (slots[slot]) {
+      delete slots[slot];
+      localStorage.setItem(lineupSlotsStorageKey(team), JSON.stringify(Object.fromEntries(LINEUP_POSITIONS.filter((p) => slots[p]).map((p) => [p, slots[p].name]))));
+      if (!myTeamEdit.activeSlot) myTeamEdit.activeSlot = slot;
+      window.fullcountAuth?.refreshMyTeam?.();
+    }
+  }
+  if (action === "mt-assignBatter") {
+    const name = e.target.closest("[data-batter]")?.dataset.batter;
+    if (!name) return;
+    const team = loadSavedTeam();
+    const found = team.batters.find((b) => b.name === name);
+    if (!found) return;
+    const slots = loadSavedLineupSlots(team);
+    const existingPos = LINEUP_POSITIONS.find((p) => slots[p]?.name === name);
+    if (!myTeamEdit.activeSlot) {
+      if (existingPos) { delete slots[existingPos]; myTeamEdit.activeSlot = existingPos; localStorage.setItem(lineupSlotsStorageKey(team), JSON.stringify(Object.fromEntries(LINEUP_POSITIONS.filter((p) => slots[p]).map((p) => [p, slots[p].name])))); }
+      window.fullcountAuth?.refreshMyTeam?.();
+      return;
+    }
+    if (existingPos) delete slots[existingPos];
+    slots[myTeamEdit.activeSlot] = found;
+    localStorage.setItem(lineupSlotsStorageKey(team), JSON.stringify(Object.fromEntries(LINEUP_POSITIONS.filter((p) => slots[p]).map((p) => [p, slots[p].name]))));
+    myTeamEdit.activeSlot = LINEUP_POSITIONS.find((p) => !slots[p]) || null;
+    window.fullcountAuth?.refreshMyTeam?.();
+  }
+  if (action === "mt-autoFill") {
+    const team = loadSavedTeam();
+    const slots = autoFillSlots(team);
+    localStorage.setItem(lineupSlotsStorageKey(team), JSON.stringify(Object.fromEntries(LINEUP_POSITIONS.filter((p) => slots[p]).map((p) => [p, slots[p].name]))));
+    myTeamEdit.activeSlot = null;
+    window.fullcountAuth?.refreshMyTeam?.();
+  }
+  if (action === "mt-selectPitcher") {
+    const pitcherName = e.target.closest("[data-pitcher]")?.dataset.pitcher;
+    if (!pitcherName) return;
+    const team = loadSavedTeam();
+    localStorage.setItem(pitcherStorageKey(team), pitcherName);
+    window.fullcountAuth?.refreshMyTeam?.();
+  }
+  // ─────────────────────────────────────────────────────────────────
   if (action === "goOnlineTab") {
     game.state = "intro";
     window.fullcountAuth?.switchView?.("online");
@@ -3647,44 +3718,94 @@ function renderScreenPanel() {
   return "";
 }
 
+function renderMyTeamPanel() {
+  const team = loadSavedTeam();
+  const slots = loadSavedLineupSlots(team);
+  const savedPitcher = loadSavedPitcher(team);
+  const activeSlot = myTeamEdit.activeSlot;
+  const filledCount = LINEUP_POSITIONS.filter((p) => slots[p]).length;
+  const assignedNames = new Set(Object.values(slots).map((b) => b.name));
+
+  const teamGrid = playableTeams.map((t) => {
+    const isSel = t.name === team.name;
+    return `<button class="player-card team-card${isSel ? " selected" : ""}" data-action="mt-selectTeam" data-team="${t.name}" style="--team-color:${t.color || "#d71920"}">
+      <span class="team-stripe"></span>
+      <span class="team-card-head">${teamLogoMarkup(t)}<strong>${t.name}</strong></span>
+      <span class="muted">${t.manager} 감독</span>
+    </button>`;
+  }).join("");
+
+  const slotsHtml = LINEUP_POSITIONS.map((pos, i) => {
+    const player = slots[pos];
+    const isActive = pos === activeSlot;
+    return `<div class="slot-row${isActive ? " active" : ""}${player ? " filled" : ""}" data-action="mt-selectSlot" data-slot="${pos}">
+      <span class="batting-order">${i + 1}</span>
+      <span class="pos-badge">${pos}</span>
+      <span class="pos-kr">${POSITION_KR[pos]}</span>
+      <span class="slot-player">${player ? player.name : "—"}</span>
+      ${player ? `<button class="slot-clear" data-action="mt-clearSlot" data-slot="${pos}">×</button>` : ""}
+    </div>`;
+  }).join("");
+
+  const poolHtml = team.batters.map((b) => {
+    const isAssigned = assignedNames.has(b.name);
+    const eligible = activeSlot ? getPlayerEligiblePositions(b).includes(activeSlot) : true;
+    return `<button class="player-card${isAssigned ? " assigned" : ""}${!eligible && !isAssigned ? " ineligible" : ""}" data-action="mt-assignBatter" data-batter="${b.name}">
+      <strong>${b.name}</strong>
+      <span class="muted">${b.position} · ${b.bats}타 · ${b.nickname}</span>
+      <span class="stats"><span class="pill">컨 ${b.contact}</span><span class="pill">파 ${b.power}</span><span class="pill">주 ${b.speed}</span><span class="pill">번 ${b.bunt}</span></span>
+    </button>`;
+  }).join("");
+
+  const pitcherHtml = team.starters.map((p) => `
+    <button class="player-card${savedPitcher?.name === p.name ? " selected" : ""}" data-action="mt-selectPitcher" data-pitcher="${p.name}">
+      <strong>${p.name}</strong>
+      <span class="muted">${p.role} · ${p.hand}HP · ${p.pitches.join(", ")}</span>
+      <span class="stats"><span class="pill">구속 ${p.velocity}</span><span class="pill">제구 ${p.control}</span><span class="pill">변화 ${p.breaking}</span><span class="pill">체력 ${Math.round(p.stamina)}</span></span>
+    </button>`).join("");
+
+  return `<div class="auth-card my-team-panel">
+    <section class="mt-section">
+      <p class="eyebrow">내 팀 · 팀 선택</p>
+      <div class="grid team-grid" style="margin-top:8px">${teamGrid}</div>
+    </section>
+    <section class="mt-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+        <p class="eyebrow">타순 구성</p>
+        <span style="font-weight:900;color:#f4c24d">${filledCount}/9</span>
+      </div>
+      <div class="lineup-builder-grid">
+        <div class="lineup-slots">${slotsHtml}</div>
+        <div class="grid roster-grid lineup-pool">${poolHtml}</div>
+      </div>
+      <div style="margin-top:8px"><button data-action="mt-autoFill">자동 채우기</button></div>
+    </section>
+    <section class="mt-section">
+      <p class="eyebrow" style="margin-bottom:8px">선발투수 선택${savedPitcher ? ` · 현재: ${savedPitcher.name}` : ""}</p>
+      <div class="grid pitcher-grid">${pitcherHtml}</div>
+    </section>
+  </div>`;
+}
+
 function renderIntro() {
-  const selected = currentUserTeam();
+  const team = currentUserTeam();
+  const pitcher = game.selectedPitcher || game.currentPitcher;
+  const lineupOk = game.selectedLineup.length === 9;
+  const pitcherOk = !!pitcher;
+  const ready = lineupOk && pitcherOk;
   return `
-    <div class="screen-panel team-select-panel">
-      <div class="screen-title">
-        <div>
-          <h1>풀카운트</h1>
-          <p>플레이할 팀을 고르고 타순과 선발투수를 직접 정하세요.</p>
-        </div>
-        <div class="title-team">
-          ${teamLogoMarkup(selected, "title-logo")}
-          <strong>${selected.name}</strong>
-        </div>
+    <div class="screen-panel intro-panel">
+      <h1 style="font-size:clamp(40px,8vw,80px);line-height:0.95;margin:0 0 14px">풀카운트</h1>
+      <div class="versus-logos" style="margin-bottom:8px">
+        ${teamLogoMarkup(team, "title-logo")}
       </div>
-      <div class="grid team-grid">
-        ${playableTeams
-          .map((team) => {
-            const isSelected = selected.name === team.name;
-            return `
-              <button class="player-card team-card ${isSelected ? "selected" : ""}" data-action="selectTeam" data-team="${team.name}" style="--team-color:${team.color || "#d71920"}">
-                <span class="team-stripe"></span>
-                <span class="team-card-head">
-                  ${teamLogoMarkup(team)}
-                  <strong>${team.name}</strong>
-                </span>
-                <span class="muted">감독 ${team.manager} · 홈 ${team.stadium}</span>
-                <span class="stats">
-                  <span class="pill">타자 ${team.batters.length}</span>
-                  <span class="pill">선발 ${team.starters.length}</span>
-                  <span class="pill">불펜 ${team.bullpen.length}</span>
-                </span>
-              </button>
-            `;
-          })
-          .join("")}
-      </div>
-      <div class="panel-actions">
-        <button class="primary" data-action="start">선택한 팀으로 시작</button>
+      <p style="font-size:20px;font-weight:900;margin:0 0 4px">${team.name}</p>
+      <p class="muted" style="margin:0 0 6px">
+        선발: ${pitcher?.name || "—"} &nbsp;·&nbsp; 라인업: ${game.selectedLineup.length}/9명
+      </p>
+      ${!ready ? `<p style="font-size:13px;font-weight:800;color:var(--kia-red);margin:0 0 10px">「내 팀」 탭에서 라인업과 선발을 설정하세요.</p>` : ""}
+      <div class="panel-actions" style="justify-content:center;margin-top:14px">
+        <button class="primary" data-action="게임시작" ${ready ? "" : "disabled"}>경기 시작</button>
       </div>
     </div>
   `;
@@ -4056,12 +4177,23 @@ window.fullcountGame = {
   startOnlinePvp,
   startLocalPvp: (teamA, teamB) => startOnlinePvp({ roomId: "LOCAL", seat: 1, teamA, teamB }),
   state: () => JSON.parse(window.render_game_to_text()),
+  renderMyTeamPanel,
   prepareOnlineLineup,
   getOnlineReadyData(teamName) {
     const team = getTeamByName(teamName) || currentUserTeam();
     const lineup = loadSavedLineup(team).map((b) => b.name);
     const pitcher = loadSavedPitcher(team)?.name || team.starters[0]?.name || null;
     return { lineup, pitcher };
+  },
+  onGameViewActivated() {
+    const team = loadSavedTeam();
+    game.userTeam = team;
+    game.selectedLineup = loadSavedLineup(team);
+    game.selectedPitcher = loadSavedPitcher(team);
+    game.currentPitcher = game.selectedPitcher ? clonePitcher(game.selectedPitcher) : null;
+    game.selectedPitch = game.currentPitcher?.pitches[0] || "직구";
+    if (!game.aiTeam) setupTeams();
+    renderUI(true);
   },
 };
 
