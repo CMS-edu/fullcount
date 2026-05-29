@@ -272,6 +272,8 @@ const game = {
   selectedLineup: [],
   lineupSlots: {},
   activeLineupSlot: null,
+  aiSelectedLineup: null,
+  onlinePrep: false,
   selectedPitcher: null,
   selectedPitch: "직구",
   combo: 0,
@@ -768,11 +770,25 @@ function setupLineup() {
   renderUI(true);
 }
 
+function prepareOnlineLineup(teamName) {
+  const team = getTeamByName(teamName) || currentUserTeam();
+  game.userTeam = team;
+  localStorage.setItem("fullcount:userTeam", team.name);
+  game.onlinePrep = true;
+  setupLineup();
+}
+
 function selectPitcher(selected) {
   if (!selected) return;
   game.selectedPitcher = clonePitcher(selected);
   game.currentPitcher = clonePitcher(selected);
   localStorage.setItem(pitcherStorageKey(), selected.name);
+  if (game.onlinePrep) {
+    game.onlinePrep = false;
+    game.state = "onlinePrepDone";
+    renderUI(true);
+    return;
+  }
   startGame();
 }
 
@@ -788,7 +804,7 @@ function startGame() {
   renderUI(true);
 }
 
-function startOnlinePvp({ roomId = "", seat = null, teamA, teamB } = {}) {
+function startOnlinePvp({ roomId = "", seat = null, teamA, teamB, lineupA, pitcherA, lineupB, pitcherB } = {}) {
   const firstTeam = getTeamByName(teamA) || currentUserTeam();
   const secondTeam = getTeamByName(teamB) || chooseOpponentTeam();
   game.mode = "onlinePvp";
@@ -800,10 +816,35 @@ function startOnlinePvp({ roomId = "", seat = null, teamA, teamB } = {}) {
   setupOnlineRealtime();
   game.userTeam = firstTeam;
   game.aiTeam = secondTeam.name === firstTeam.name ? chooseOpponentTeam() : secondTeam;
-  game.selectedLineup = getDefaultLineup(firstTeam);
-  game.selectedPitcher = clonePitcher(firstTeam.starters[0]);
-  game.currentPitcher = clonePitcher(firstTeam.starters[0]);
-  game.aiPitcher = clonePitcher(game.aiTeam.starters[0]);
+
+  // P1 lineup
+  if (Array.isArray(lineupA) && lineupA.length === 9) {
+    const resolved = lineupA.map((name) => firstTeam.batters.find((b) => b.name === name)).filter(Boolean);
+    game.selectedLineup = resolved.length === 9 ? resolved : loadSavedLineup(firstTeam);
+  } else {
+    game.selectedLineup = loadSavedLineup(firstTeam);
+  }
+
+  // P1 pitcher
+  const allPitchersA = [...firstTeam.starters, ...Object.values(firstTeam.bullpenGroups || {}).flat()];
+  const foundPA = pitcherA ? allPitchersA.find((p) => p.name === pitcherA) : null;
+  const startPitcherA = foundPA || loadSavedPitcher(firstTeam) || firstTeam.starters[0];
+  game.selectedPitcher = clonePitcher(startPitcherA);
+  game.currentPitcher = clonePitcher(startPitcherA);
+
+  // P2 lineup (ai side)
+  if (Array.isArray(lineupB) && lineupB.length === 9) {
+    const resolved = lineupB.map((name) => game.aiTeam.batters.find((b) => b.name === name)).filter(Boolean);
+    game.aiSelectedLineup = resolved.length === 9 ? resolved : null;
+  } else {
+    game.aiSelectedLineup = null;
+  }
+
+  // P2 pitcher (ai side)
+  const allPitchersB = [...game.aiTeam.starters, ...Object.values(game.aiTeam.bullpenGroups || {}).flat()];
+  const foundPB = pitcherB ? allPitchersB.find((p) => p.name === pitcherB) : null;
+  game.aiPitcher = clonePitcher(foundPB || game.aiTeam.starters[0]);
+
   game.battingOrderIndex = 0;
   game.aiBattingOrderIndex = 0;
   localStorage.setItem("fullcount:userTeam", firstTeam.name);
@@ -878,6 +919,7 @@ function exportOnlineSnapshot(reason) {
     },
     currentPitcher: pitcherSnapshot(game.currentPitcher),
     aiPitcher: pitcherSnapshot(game.aiPitcher),
+    aiLineup: game.aiSelectedLineup ? game.aiSelectedLineup.map((b) => b.name) : null,
     resultText: game.resultText,
     resultTimer: game.resultTimer,
   };
@@ -931,6 +973,10 @@ function applyOnlineSnapshot(snapshot) {
   game.aiBattingOrderIndex = snapshot.aiBattingOrderIndex;
   game.currentPitcher = hydratePitcherSnapshot(snapshot.currentPitcher, currentUserTeam(), game.currentPitcher);
   game.aiPitcher = hydratePitcherSnapshot(snapshot.aiPitcher, game.aiTeam, game.aiPitcher);
+  if (Array.isArray(snapshot.aiLineup) && snapshot.aiLineup.length === 9) {
+    const resolved = snapshot.aiLineup.map((name) => game.aiTeam.batters.find((b) => b.name === name)).filter(Boolean);
+    if (resolved.length === 9) game.aiSelectedLineup = resolved;
+  }
   game.bases = {
     first: hydrateRunner(snapshot.bases?.first),
     second: hydrateRunner(snapshot.bases?.second),
@@ -3477,7 +3523,16 @@ function handleMouseClick(e) {
     resetGame(true);
     setupTeams();
   }
+  if (action === "goOnlineTab") {
+    game.state = "intro";
+    window.fullcountAuth?.switchView?.("online");
+  }
+  if (action === "editLineupOnline") {
+    game.onlinePrep = true;
+    setupLineup();
+  }
   if (action === "changeTeam") {
+    game.onlinePrep = false;
     game.state = "intro";
     renderUI(true);
   }
@@ -3569,6 +3624,7 @@ function renderScreenPanel() {
     return renderIntro();
   }
   if (game.state === "lineupSelect") return renderLineupSelect();
+  if (game.state === "onlinePrepDone") return renderOnlinePrepDone();
   if (game.state === "pitcherSelect") return renderPitcherSelect();
   if (game.state === "bullpen") return renderBullpen();
   if (game.state === "gameOver") {
@@ -3690,6 +3746,28 @@ function renderLineupSelect() {
         <button data-action="changeTeam">팀 다시 선택</button>
         <button data-action="defaultLineup">자동 채우기</button>
         <button class="primary" data-action="confirmLineup" ${filledCount === 9 ? "" : "disabled"}>라인업 확정</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderOnlinePrepDone() {
+  const team = currentUserTeam();
+  const pitcher = game.selectedPitcher;
+  return `
+    <div class="screen-panel intro-panel">
+      <p class="eyebrow" style="text-align:center">ONLINE PVP</p>
+      <h2 style="text-align:center;margin:8px 0 4px">${teamLogoMarkup(team, "inline-logo")} ${team.name}</h2>
+      <p style="text-align:center;margin:0 0 10px;font-weight:800">선발: ${pitcher?.name || "-"}</p>
+      <div class="selected-lineup" style="justify-content:center">
+        ${game.selectedLineup.map((b, i) => `<span class="lineup-chip">${i + 1}. ${b.name}</span>`).join("")}
+      </div>
+      <p style="text-align:center;margin:14px 0 6px;font-size:22px">✓</p>
+      <p style="text-align:center;font-weight:800">라인업 / 선발 설정 완료</p>
+      <p class="muted" style="text-align:center;margin-top:4px">실시간 대전 탭에서 방을 만들거나 입장하고 준비를 누르세요.</p>
+      <div class="panel-actions" style="justify-content:center;margin-top:16px">
+        <button class="primary" data-action="goOnlineTab">실시간 대전 탭으로 →</button>
+        <button data-action="editLineupOnline">라인업 다시 편집</button>
       </div>
     </div>
   `;
@@ -3832,7 +3910,12 @@ function assignBatterToSlot(name) {
 }
 
 function syncCurrentMatchup() {
-  game.currentBatter = game.half === "top" ? game.selectedLineup[game.battingOrderIndex] : getAIBatter();
+  if (game.half === "top") {
+    game.currentBatter = game.selectedLineup[game.battingOrderIndex % Math.max(1, game.selectedLineup.length)];
+  } else {
+    const aiLineup = game.aiSelectedLineup?.length === 9 ? game.aiSelectedLineup : null;
+    game.currentBatter = aiLineup ? aiLineup[game.aiBattingOrderIndex % 9] : getAIBatter();
+  }
 }
 
 function getAIBatter() {
@@ -3973,6 +4056,13 @@ window.fullcountGame = {
   startOnlinePvp,
   startLocalPvp: (teamA, teamB) => startOnlinePvp({ roomId: "LOCAL", seat: 1, teamA, teamB }),
   state: () => JSON.parse(window.render_game_to_text()),
+  prepareOnlineLineup,
+  getOnlineReadyData(teamName) {
+    const team = getTeamByName(teamName) || currentUserTeam();
+    const lineup = loadSavedLineup(team).map((b) => b.name);
+    const pitcher = loadSavedPitcher(team)?.name || team.starters[0]?.name || null;
+    return { lineup, pitcher };
+  },
 };
 
 init();

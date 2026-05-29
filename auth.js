@@ -32,6 +32,10 @@ window.fullcountAuth = {
   get user() {
     return authState.user;
   },
+  switchView(view) {
+    authState.view = view;
+    renderApp();
+  },
   async saveMatch(match) {
     if (!authState.user) return;
     try {
@@ -157,6 +161,7 @@ function onlineTemplate() {
         <label>닉네임<input name="username" value="${escapeHtml(authState.user?.username || "Player")}" /></label>
         <label>팀<select name="team">${teamOptions}</select></label>
         <label>방 코드<input name="roomId" value="${escapeHtml(onlineState.roomId)}" placeholder="입장할 때만 입력" /></label>
+        <button type="button" data-online-action="setupLineup">라인업 / 선발 설정</button>
         <button class="primary" type="button" data-online-action="create">방 만들기</button>
         <button type="button" data-online-action="join">입장</button>
         <button type="button" data-online-action="ready" ${onlineState.roomId ? "" : "disabled"}>준비</button>
@@ -186,8 +191,16 @@ function bindOnline() {
     connectRealtime();
     sendRealtime({ type: "join-room", roomId: data.roomId, username: data.username, team: data.team });
   });
+  form.querySelector("[data-online-action='setupLineup']")?.addEventListener("click", () => {
+    const data = Object.fromEntries(new FormData(form));
+    authState.view = "game";
+    renderApp();
+    window.fullcountGame?.prepareOnlineLineup?.(data.team);
+  });
   form.querySelector("[data-online-action='ready']")?.addEventListener("click", () => {
-    sendRealtime({ type: "ready", ready: true });
+    const data = Object.fromEntries(new FormData(form));
+    const readyData = window.fullcountGame?.getOnlineReadyData?.(data.team) || {};
+    sendRealtime({ type: "ready", ready: true, ...readyData });
     addOnlineLog("준비 완료를 보냈어.");
   });
   form.querySelector("[data-online-action='copy']")?.addEventListener("click", async () => {
@@ -258,6 +271,10 @@ function handleRealtime(data) {
       seat: onlineState.seat,
       teamA: p1?.team,
       teamB: p2?.team,
+      lineupA: p1?.lineup,
+      pitcherA: p1?.pitcher,
+      lineupB: p2?.lineup,
+      pitcherB: p2?.pitcher,
     });
     authState.view = "game";
   }

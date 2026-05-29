@@ -491,6 +491,8 @@ function handleRealtimeMessage(client, message) {
   if (!room) return;
   if (data.type === "ready") {
     client.ready = Boolean(data.ready);
+    if (Array.isArray(data.lineup)) client.lineup = data.lineup.slice(0, 9).map(String);
+    if (data.pitcher) client.pitcher = String(data.pitcher).slice(0, 30);
     broadcastRoomState(room);
     if (room.status !== "playing" && [...room.clients].length === 2 && [...room.clients].every((player) => player.ready)) {
       room.status = "playing";
@@ -547,6 +549,8 @@ function roomPlayers(room) {
       seat: client.seat,
       username: client.username,
       team: client.team,
+      lineup: client.lineup || null,
+      pitcher: client.pitcher || null,
       ready: client.ready,
     }));
 }
