@@ -482,7 +482,7 @@ function renderBattingTable(season) {
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(b.team || "-")}</td>
-      <td class="rec-player">${escapeHtml(b.name)}</td>
+      <td class="rec-player">${recPhotoMarkup(b.team, b.name)}<span>${escapeHtml(b.name)}</span></td>
       <td>${b.G}</td>
       <td>${b.AB}</td>
       <td>${b.H}</td>
@@ -502,6 +502,12 @@ function renderBattingTable(season) {
     </table>`;
 }
 
+function recPhotoMarkup(team, name) {
+  const url = window.fullcountSeason?.playerPhoto?.(team, name);
+  if (!url) return "";
+  return `<img class="rec-photo" src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.style.display='none'" />`;
+}
+
 function renderHRTable(season) {
   const list = Object.entries(season.batters || {})
     .map(([name, s]) => ({ name, ...s }))
@@ -512,7 +518,7 @@ function renderHRTable(season) {
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(b.team || "-")}</td>
-      <td class="rec-player">${escapeHtml(b.name)}</td>
+      <td class="rec-player">${recPhotoMarkup(b.team, b.name)}<span>${escapeHtml(b.name)}</span></td>
       <td class="rec-pos">${b.HR}</td>
       <td>${b.RBI}</td>
       <td>${b.H}</td>
@@ -541,7 +547,7 @@ function renderPitchingTable(season) {
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(p.team || "-")}</td>
-      <td class="rec-player">${escapeHtml(p.name)}</td>
+      <td class="rec-player">${recPhotoMarkup(p.team, p.name)}<span>${escapeHtml(p.name)}</span></td>
       <td>${p.G}</td>
       <td>${ipFormat(p.outs)}</td>
       <td>${p.H}</td>

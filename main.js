@@ -545,6 +545,29 @@ function getTeamLogoSources(team) {
   return [team?.logo, team?.fallbackLogo].filter(Boolean);
 }
 
+const PLAYER_PHOTO_FOLDER = {
+  "KIA 타이거즈": "KIA",
+  "KIA": "KIA",
+  "kia": "KIA",
+  "삼성": "SAMSUNG",
+  "삼성 라이온즈": "SAMSUNG",
+  "LG": "LG",
+  "LG 트윈스": "LG",
+};
+
+function playerPhotoUrl(teamName, playerName) {
+  if (!teamName || !playerName) return null;
+  const folder = PLAYER_PHOTO_FOLDER[teamName];
+  if (!folder) return null;
+  return `assets/team-players/${folder}/${encodeURIComponent(playerName)}.png`;
+}
+
+function playerPhotoMarkup(teamName, playerName, extraClass = "") {
+  const url = playerPhotoUrl(teamName, playerName);
+  if (!url) return "";
+  return `<img class="player-photo ${extraClass}" src="${url}" alt="${playerName || ""}" loading="lazy" onerror="this.style.display='none'" />`;
+}
+
 function teamLogoMarkup(team, extraClass = "") {
   const style = `--team-color:${team.color || "#d71920"};--team-secondary:${team.secondaryColor || "#111111"};--team-text:${team.textColor || "#ffffff"}`;
   const fallback = team.fallbackLogo ? `this.onerror=function(){this.style.display='none'};this.src='${team.fallbackLogo}'` : "this.style.display='none'";
@@ -4287,8 +4310,10 @@ function renderMyTeamPanel() {
   const slotsHtml = order.map((pos, i) => {
     const player = slots[pos];
     const isActive = pos === activeSlot;
+    const photo = player ? playerPhotoMarkup(team.name, player.name, "slot-photo") : `<span class="slot-photo slot-photo-empty">·</span>`;
     return `<div class="slot-row${isActive ? " active" : ""}${player ? " filled" : ""}" data-action="mt-selectSlot" data-slot="${pos}">
       <span class="batting-order">${i + 1}</span>
+      ${photo}
       <span class="pos-badge">${pos}</span>
       <span class="pos-kr">${POSITION_KR[pos]}</span>
       <span class="slot-player">${player ? player.name : "—"}</span>
@@ -4312,6 +4337,7 @@ function renderMyTeamPanel() {
     else if (eligible) cls += " mt-eligible";
     else if (activeSlot && !eligible) cls += " mt-ineligible";
     return `<button class="${cls}" data-action="mt-assignBatter" data-batter="${b.name}">
+      ${playerPhotoMarkup(team.name, b.name, "mt-photo")}
       <span class="mt-player-left">
         <span class="mt-player-name">${b.name}</span>
         <span class="mt-player-info">${b.position} · ${b.bats}타 · ${b.nickname}</span>
@@ -4325,6 +4351,7 @@ function renderMyTeamPanel() {
   const pitcherHtml = team.starters.map((p) => {
     const isSel = savedPitcher?.name === p.name;
     return `<button class="mt-player-row mt-pitcher-row${isSel ? " mt-pitcher-sel" : ""}" data-action="mt-selectPitcher" data-pitcher="${p.name}">
+      ${playerPhotoMarkup(team.name, p.name, "mt-photo")}
       <span class="mt-player-left">
         <span class="mt-player-name">${p.name}</span>
         <span class="mt-player-info">${p.role} · ${p.hand}HP · ${p.pitches.join(" / ")}</span>
@@ -4396,9 +4423,11 @@ function renderLineupSelect() {
   const slotsHtml = order.map((pos, i) => {
     const player = slots[pos];
     const isActive = pos === activeSlot;
+    const photo = player ? playerPhotoMarkup(team.name, player.name, "slot-photo") : `<span class="slot-photo slot-photo-empty">·</span>`;
     return `
       <div class="slot-row${isActive ? " active" : ""}${player ? " filled" : ""}" data-action="selectSlot" data-slot="${pos}">
         <span class="batting-order">${i + 1}</span>
+        ${photo}
         <span class="pos-badge">${pos}</span>
         <span class="pos-kr">${POSITION_KR[pos]}</span>
         <span class="slot-player">${player ? player.name : "—"}</span>
@@ -4416,6 +4445,7 @@ function renderLineupSelect() {
     const eligible = activeSlot ? getPlayerEligiblePositions(b).includes(activeSlot) : true;
     return `
       <button class="player-card${isAssigned ? " assigned" : ""}${!eligible && !isAssigned ? " ineligible" : ""}" data-action="assignBatter" data-batter="${b.name}">
+        ${playerPhotoMarkup(team.name, b.name, "player-card-photo")}
         <strong>${b.name}</strong>
         <span class="muted">${b.position} · ${b.bats}타 · ${b.nickname}</span>
         <span class="stats">
@@ -4736,6 +4766,7 @@ window.fullcountSeason = {
   reset() {
     localStorage.removeItem("fullcount:season");
   },
+  playerPhoto: playerPhotoUrl,
 };
 
 function loadRecord() {
