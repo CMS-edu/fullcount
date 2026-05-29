@@ -637,6 +637,7 @@ canvas {
   background: #141414;
 }
 
+/* ── 내 팀 패널 ───────────────────────────────────── */
 .my-team-panel {
   display: flex;
   flex-direction: column;
@@ -650,6 +651,187 @@ canvas {
 
 .mt-section:last-child {
   border-bottom: none;
+}
+
+.mt-lineup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.mt-count {
+  font-size: 16px;
+  font-weight: 900;
+  color: #666;
+}
+
+.mt-count-done {
+  color: #4caf50;
+}
+
+/* 슬롯 + 풀 2열 레이아웃 */
+.mt-builder {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+/* 풀 영역 */
+.mt-pool-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mt-pool-hint {
+  margin: 0;
+  padding: 6px 8px;
+  background: #1a1a1a;
+  border-left: 4px solid #444;
+  font-size: 12px;
+  font-weight: 800;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mt-pool-hint .pos-badge {
+  flex-shrink: 0;
+}
+
+.mt-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+/* 컴팩트 선수 행 */
+.mt-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 2px solid #2e2e2e;
+  background: #1c1c1c;
+  color: #e8e0d5;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+  transition: background 0.07s, border-color 0.07s;
+}
+
+.mt-player-row:hover {
+  background: #272727;
+  border-color: #444;
+  transform: none;
+  box-shadow: none;
+}
+
+.mt-player-row.mt-eligible {
+  border-color: #2d5a2d;
+  background: #1a2b1a;
+}
+
+.mt-player-row.mt-eligible:hover {
+  background: #203520;
+  border-color: #4a8a4a;
+}
+
+.mt-player-row.mt-assigned {
+  opacity: 0.3;
+}
+
+.mt-player-row.mt-ineligible {
+  opacity: 0.35;
+}
+
+.mt-pitcher-row {
+  background: #1a1c24;
+  border-color: #2e3040;
+}
+
+.mt-pitcher-row:hover {
+  background: #22253a;
+  border-color: #4a5080;
+}
+
+.mt-pitcher-sel {
+  border-color: #5a4a00 !important;
+  background: #2a2200 !important;
+  box-shadow: 0 0 0 2px #f4c24d !important;
+}
+
+.mt-player-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mt-player-name {
+  font-size: 15px;
+  font-weight: 850;
+  color: #f0e8df;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-player-info {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mt-player-stats {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.mt-stat {
+  padding: 3px 6px;
+  background: #262626;
+  border: 1px solid #3a3a3a;
+  font-size: 11px;
+  font-weight: 800;
+  color: #c9a84c;
+  white-space: nowrap;
+  border-radius: 2px;
+}
+
+.mt-pitcher-row .mt-stat {
+  color: #7ab0ff;
+  border-color: #2a3a55;
+  background: #1a1e2e;
+}
+
+.mt-pitcher-sel .mt-stat {
+  color: #f4c24d;
+  background: #2a2000;
+  border-color: #5a4a00;
+}
+
+@media (max-width: 900px) {
+  .mt-builder {
+    grid-template-columns: 1fr;
+  }
+
+  .mt-pool {
+    max-height: 320px;
+  }
 }
 
 .lineup-builder-panel {

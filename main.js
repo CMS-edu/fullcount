@@ -3747,22 +3747,40 @@ function renderMyTeamPanel() {
     </div>`;
   }).join("");
 
+  const poolHint = activeSlot
+    ? `<p class="mt-pool-hint"><span class="pos-badge">${activeSlot}</span> ${POSITION_KR[activeSlot]}에 배정할 선수를 선택하세요 · 초록=적합</p>`
+    : `<p class="mt-pool-hint">슬롯을 먼저 클릭하면 적합 선수가 강조됩니다</p>`;
+
   const poolHtml = team.batters.map((b) => {
     const isAssigned = assignedNames.has(b.name);
-    const eligible = activeSlot ? getPlayerEligiblePositions(b).includes(activeSlot) : true;
-    return `<button class="player-card${isAssigned ? " assigned" : ""}${!eligible && !isAssigned ? " ineligible" : ""}" data-action="mt-assignBatter" data-batter="${b.name}">
-      <strong>${b.name}</strong>
-      <span class="muted">${b.position} · ${b.bats}타 · ${b.nickname}</span>
-      <span class="stats"><span class="pill">컨 ${b.contact}</span><span class="pill">파 ${b.power}</span><span class="pill">주 ${b.speed}</span><span class="pill">번 ${b.bunt}</span></span>
+    const eligible = activeSlot ? getPlayerEligiblePositions(b).includes(activeSlot) : false;
+    let cls = "mt-player-row";
+    if (isAssigned) cls += " mt-assigned";
+    else if (eligible) cls += " mt-eligible";
+    else if (activeSlot && !eligible) cls += " mt-ineligible";
+    return `<button class="${cls}" data-action="mt-assignBatter" data-batter="${b.name}">
+      <span class="mt-player-left">
+        <span class="mt-player-name">${b.name}</span>
+        <span class="mt-player-info">${b.position} · ${b.bats}타 · ${b.nickname}</span>
+      </span>
+      <span class="mt-player-stats">
+        <span class="mt-stat">컨${b.contact}</span><span class="mt-stat">파${b.power}</span><span class="mt-stat">주${b.speed}</span>
+      </span>
     </button>`;
   }).join("");
 
-  const pitcherHtml = team.starters.map((p) => `
-    <button class="player-card${savedPitcher?.name === p.name ? " selected" : ""}" data-action="mt-selectPitcher" data-pitcher="${p.name}">
-      <strong>${p.name}</strong>
-      <span class="muted">${p.role} · ${p.hand}HP · ${p.pitches.join(", ")}</span>
-      <span class="stats"><span class="pill">구속 ${p.velocity}</span><span class="pill">제구 ${p.control}</span><span class="pill">변화 ${p.breaking}</span><span class="pill">체력 ${Math.round(p.stamina)}</span></span>
-    </button>`).join("");
+  const pitcherHtml = team.starters.map((p) => {
+    const isSel = savedPitcher?.name === p.name;
+    return `<button class="mt-player-row mt-pitcher-row${isSel ? " mt-pitcher-sel" : ""}" data-action="mt-selectPitcher" data-pitcher="${p.name}">
+      <span class="mt-player-left">
+        <span class="mt-player-name">${p.name}</span>
+        <span class="mt-player-info">${p.role} · ${p.hand}HP · ${p.pitches.join(" / ")}</span>
+      </span>
+      <span class="mt-player-stats">
+        <span class="mt-stat">구${p.velocity}</span><span class="mt-stat">제${p.control}</span><span class="mt-stat">변${p.breaking}</span>
+      </span>
+    </button>`;
+  }).join("");
 
   return `<div class="auth-card my-team-panel">
     <section class="mt-section">
@@ -3770,19 +3788,22 @@ function renderMyTeamPanel() {
       <div class="grid team-grid" style="margin-top:8px">${teamGrid}</div>
     </section>
     <section class="mt-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+      <div class="mt-lineup-header">
         <p class="eyebrow">타순 구성</p>
-        <span style="font-weight:900;color:#f4c24d">${filledCount}/9</span>
+        <span class="mt-count${filledCount === 9 ? " mt-count-done" : ""}">${filledCount}/9</span>
       </div>
-      <div class="lineup-builder-grid">
+      <div class="mt-builder">
         <div class="lineup-slots">${slotsHtml}</div>
-        <div class="grid roster-grid lineup-pool">${poolHtml}</div>
+        <div class="mt-pool-wrap">
+          ${poolHint}
+          <div class="mt-pool">${poolHtml}</div>
+        </div>
       </div>
-      <div style="margin-top:8px"><button data-action="mt-autoFill">자동 채우기</button></div>
+      <div style="margin-top:10px"><button data-action="mt-autoFill">자동 채우기</button></div>
     </section>
     <section class="mt-section">
-      <p class="eyebrow" style="margin-bottom:8px">선발투수 선택${savedPitcher ? ` · 현재: ${savedPitcher.name}` : ""}</p>
-      <div class="grid pitcher-grid">${pitcherHtml}</div>
+      <p class="eyebrow" style="margin-bottom:8px">선발투수 선택${savedPitcher ? ` · <strong style="color:#f4c24d">${savedPitcher.name}</strong>` : ""}</p>
+      <div class="mt-pool">${pitcherHtml}</div>
     </section>
   </div>`;
 }
