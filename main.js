@@ -762,8 +762,9 @@ function setupOnlineRealtime() {
   });
 }
 
-function broadcastOnlineSnapshot(reason) {
-  if (!isOnlinePvp() || !canControlOnlineHalf() || game.applyingOnlineSnapshot) return;
+function broadcastOnlineSnapshot(reason, options = {}) {
+  if (!isOnlinePvp() || game.applyingOnlineSnapshot) return;
+  if (!options.force && !canControlOnlineHalf()) return;
   window.fullcountRealtime?.sendGameEvent?.({
     kind: "snapshot",
     snapshot: exportOnlineSnapshot(reason),
@@ -2836,6 +2837,7 @@ function switchHalfInning(forceBottom = false) {
       syncCurrentMatchup();
       renderUI(true);
     });
+    broadcastOnlineSnapshot("halfChange", { force: true });
   } else {
     game.inning += 1;
     if (checkGameEnd()) return;
@@ -2848,6 +2850,7 @@ function switchHalfInning(forceBottom = false) {
       syncCurrentMatchup();
       renderUI(true);
     });
+    broadcastOnlineSnapshot("halfChange", { force: true });
   }
 }
 
