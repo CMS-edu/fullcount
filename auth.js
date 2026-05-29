@@ -117,6 +117,7 @@ function renderApp() {
   }
   if (authState.view === "records") {
     authPanel.innerHTML = recordsTemplate();
+    bindRecords();
     return;
   }
   if (authState.view === "settings") {
@@ -392,6 +393,9 @@ async function submitAuth(path, body, message) {
 }
 
 function recordsTemplate() {
+  const season = (window.fullcountSeason?.load?.() || { batters: {}, pitchers: {}, teams: {}, matches: [] });
+  const tab = authState.recordsTab || "standings";
+  const tabBtn = (key, label) => `<button class="rec-tab${tab === key ? " active" : ""}" data-rec-tab="${key}">${label}</button>`;
   const recent = authState.matches.length
     ? authState.matches
         .map(
@@ -402,14 +406,181 @@ function recordsTemplate() {
             </li>`
         )
         .join("")
-    : "<li><strong>기록 없음</strong><span>로그인 후 경기를 끝내면 서버에 저장돼.</span></li>";
+    : (season.matches.length
+        ? season.matches.slice(0, 10).map((m) => `
+            <li>
+              <strong>${escapeHtml(m.userTeam)} ${m.userScore} - ${m.aiScore} ${escapeHtml(m.aiTeam)}</strong>
+              <span>${m.userScore > m.aiScore ? "승" : m.userScore < m.aiScore ? "패" : "무"} · ${new Date(m.date).toLocaleString("ko-KR")}</span>
+            </li>`).join("")
+        : "<li><strong>기록 없음</strong><span>경기를 끝내면 시즌 기록이 누적됩니다.</span></li>");
+
+  let body = "";
+  if (tab === "standings") body = renderStandings(season);
+  else if (tab === "batting") body = renderBattingTable(season);
+  else if (tab === "hr") body = renderHRTable(season);
+  else if (tab === "pitching") body = renderPitchingTable(season);
+  else if (tab === "recent") body = `<ol class="match-list">${recent}</ol>`;
+
   return `
-    <div class="auth-card">
-      <p class="eyebrow">RECORDS</p>
-      <h2>최근 경기</h2>
-      <ol class="match-list">${recent}</ol>
-      ${authState.user ? "" : `<p class="auth-message">로그인하면 경기 기록이 저장돼.</p>`}
+    <div class="auth-card records-card">
+      <p class="eyebrow">RECORDS · 시즌 누적</p>
+      <h2>기록실</h2>
+      <div class="rec-tabs">
+        ${tabBtn("standings", "팀 순위")}
+        ${tabBtn("batting", "타율 순위")}
+        ${tabBtn("hr", "홈런 순위")}
+        ${tabBtn("pitching", "투수 기록")}
+        ${tabBtn("recent", "최근 경기")}
+        <button class="rec-tab rec-reset" data-rec-tab="reset">시즌 리셋</button>
+      </div>
+      <div class="rec-body">${body}</div>
+      ${authState.user ? "" : `<p class="auth-message">로그인하면 경기 기록이 서버에도 저장됩니다.</p>`}
     </div>`;
+}
+
+function renderStandings(season) {
+  const teams = Object.entries(season.teams || {})
+    .map(([name, s]) => {
+      const games = (s.W || 0) + (s.L || 0) + (s.T || 0);
+      const pct = (s.W || 0) + (s.L || 0) > 0 ? (s.W / ((s.W) + (s.L))) : 0;
+      const diff = (s.RS || 0) - (s.RA || 0);
+      return { name, games, ...s, pct, diff };
+    })
+    .sort((a, b) => b.pct - a.pct || (b.diff || 0) - (a.diff || 0));
+  if (!teams.length) return `<p class="rec-empty">아직 등록된 팀 기록이 없습니다.</p>`;
+  let lead = teams[0];
+  const rows = teams.map((t, i) => {
+    const gap = i === 0 ? "-" : (((lead.W - t.W) + (t.L - lead.L)) / 2).toFixed(1);
+    return `<tr>
+      <td class="rec-rank">${i + 1}</td>
+      <td class="rec-team">${escapeHtml(t.name)}</td>
+      <td>${t.games}</td>
+      <td>${t.W}</td>
+      <td>${t.L}</td>
+      <td>${t.T}</td>
+      <td>${t.pct.toFixed(3)}</td>
+      <td>${gap}</td>
+      <td>${t.RS}</td>
+      <td>${t.RA}</td>
+      <td class="${t.diff > 0 ? "rec-pos" : t.diff < 0 ? "rec-neg" : ""}">${t.diff > 0 ? "+" : ""}${t.diff}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <table class="rec-table">
+      <thead><tr><th>순위</th><th>팀</th><th>경기</th><th>승</th><th>패</th><th>무</th><th>승률</th><th>게임차</th><th>득점</th><th>실점</th><th>득실</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderBattingTable(season) {
+  const list = Object.entries(season.batters || {})
+    .map(([name, s]) => ({ name, ...s, AVG: s.AB > 0 ? (s.H / s.AB) : 0, OBP: (s.AB + s.BB) > 0 ? ((s.H + s.BB) / (s.AB + s.BB)) : 0 }))
+    .filter((b) => b.AB >= 1)
+    .sort((a, b) => b.AVG - a.AVG || b.H - a.H);
+  if (!list.length) return `<p class="rec-empty">아직 타격 기록이 없습니다. 한 경기를 마치면 표시됩니다.</p>`;
+  const rows = list.slice(0, 30).map((b, i) => `
+    <tr>
+      <td class="rec-rank">${i + 1}</td>
+      <td class="rec-team">${escapeHtml(b.team || "-")}</td>
+      <td class="rec-player">${escapeHtml(b.name)}</td>
+      <td>${b.G}</td>
+      <td>${b.AB}</td>
+      <td>${b.H}</td>
+      <td>${b["2B"]}</td>
+      <td>${b["3B"]}</td>
+      <td>${b.HR}</td>
+      <td>${b.RBI}</td>
+      <td>${b.BB}</td>
+      <td>${b.SO}</td>
+      <td class="rec-pos">${b.AVG.toFixed(3)}</td>
+      <td>${b.OBP.toFixed(3)}</td>
+    </tr>`).join("");
+  return `
+    <table class="rec-table">
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>타수</th><th>안타</th><th>2루타</th><th>3루타</th><th>홈런</th><th>타점</th><th>볼넷</th><th>삼진</th><th>타율</th><th>출루율</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderHRTable(season) {
+  const list = Object.entries(season.batters || {})
+    .map(([name, s]) => ({ name, ...s }))
+    .filter((b) => (b.HR || 0) > 0)
+    .sort((a, b) => b.HR - a.HR || b.RBI - a.RBI);
+  if (!list.length) return `<p class="rec-empty">아직 홈런이 없습니다.</p>`;
+  const rows = list.slice(0, 30).map((b, i) => `
+    <tr>
+      <td class="rec-rank">${i + 1}</td>
+      <td class="rec-team">${escapeHtml(b.team || "-")}</td>
+      <td class="rec-player">${escapeHtml(b.name)}</td>
+      <td class="rec-pos">${b.HR}</td>
+      <td>${b.RBI}</td>
+      <td>${b.H}</td>
+      <td>${b.AB}</td>
+      <td>${b.AB > 0 ? (b.H / b.AB).toFixed(3) : "-"}</td>
+    </tr>`).join("");
+  return `
+    <table class="rec-table">
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>홈런</th><th>타점</th><th>안타</th><th>타수</th><th>타율</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderPitchingTable(season) {
+  const list = Object.entries(season.pitchers || {})
+    .map(([name, s]) => {
+      const ip = (s.outs || 0) / 3;
+      const era = ip > 0 ? ((s.ER || 0) * 9 / ip) : 0;
+      const whip = ip > 0 ? ((s.H + s.BB) / ip) : 0;
+      return { name, ...s, ip, era, whip };
+    })
+    .filter((p) => p.outs > 0)
+    .sort((a, b) => a.era - b.era);
+  if (!list.length) return `<p class="rec-empty">아직 투수 기록이 없습니다.</p>`;
+  const rows = list.slice(0, 30).map((p, i) => `
+    <tr>
+      <td class="rec-rank">${i + 1}</td>
+      <td class="rec-team">${escapeHtml(p.team || "-")}</td>
+      <td class="rec-player">${escapeHtml(p.name)}</td>
+      <td>${p.G}</td>
+      <td>${ipFormat(p.outs)}</td>
+      <td>${p.H}</td>
+      <td>${p.HR}</td>
+      <td>${p.BB}</td>
+      <td>${p.SO}</td>
+      <td>${p.ER}</td>
+      <td>${p.pitches}</td>
+      <td class="rec-pos">${p.ip > 0 ? p.era.toFixed(2) : "-"}</td>
+      <td>${p.ip > 0 ? p.whip.toFixed(2) : "-"}</td>
+    </tr>`).join("");
+  return `
+    <table class="rec-table">
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>이닝</th><th>피안타</th><th>피홈런</th><th>4사구</th><th>K</th><th>자책</th><th>투구수</th><th>ERA</th><th>WHIP</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function ipFormat(outs) {
+  const whole = Math.floor(outs / 3);
+  const rem = outs % 3;
+  return rem === 0 ? `${whole}` : `${whole} ${rem}/3`;
+}
+
+function bindRecords() {
+  document.querySelectorAll("[data-rec-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.recTab;
+      if (tab === "reset") {
+        if (confirm("시즌 누적 기록(타율·홈런·팀 순위·투수)을 모두 지울까요?")) {
+          window.fullcountSeason?.reset?.();
+          renderApp();
+        }
+        return;
+      }
+      authState.recordsTab = tab;
+      renderApp();
+    });
+  });
 }
 
 function settingsTemplate() {

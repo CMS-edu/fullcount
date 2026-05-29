@@ -300,6 +300,120 @@ button:disabled {
   font-weight: 800;
 }
 
+.records-card {
+  display: grid;
+  gap: 14px;
+}
+
+.rec-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 3px solid #050505;
+  padding-bottom: 8px;
+}
+
+.rec-tab {
+  padding: 8px 14px;
+  border: 3px solid #050505;
+  background: #ffece1;
+  color: #141414;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #050505;
+  transition: transform 0.08s;
+}
+
+.rec-tab:hover {
+  transform: translate(-1px, -1px);
+}
+
+.rec-tab.active {
+  background: #d71920;
+  color: #fff4df;
+  box-shadow: 3px 3px 0 #050505, inset 0 0 0 2px #fff4df;
+}
+
+.rec-tab.rec-reset {
+  margin-left: auto;
+  background: #21130a;
+  color: #f4c24d;
+  font-size: 12px;
+}
+
+.rec-body {
+  max-height: 540px;
+  overflow: auto;
+  border: 3px solid #050505;
+  background: #fff4df;
+  padding: 0;
+}
+
+.rec-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: inherit;
+  font-size: 13px;
+  color: #141414;
+}
+
+.rec-table thead th {
+  position: sticky;
+  top: 0;
+  background: #050505;
+  color: #f4c24d;
+  font-weight: 900;
+  padding: 8px 6px;
+  text-align: center;
+  border-right: 1px solid #2a2a2a;
+}
+
+.rec-table tbody td {
+  padding: 6px;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-weight: 800;
+}
+
+.rec-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.rec-rank {
+  font-weight: 900;
+  color: #d71920;
+}
+
+.rec-team {
+  font-weight: 900;
+  text-align: left;
+  padding-left: 12px;
+}
+
+.rec-player {
+  font-weight: 900;
+  text-align: left;
+  padding-left: 8px;
+}
+
+.rec-pos {
+  color: #2e6a3a;
+  font-weight: 900;
+}
+
+.rec-neg {
+  color: #d71920;
+}
+
+.rec-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-weight: 800;
+  color: #5c5650;
+}
+
 .game-shell {
   position: relative;
   overflow: hidden;
@@ -853,7 +967,7 @@ canvas {
 
 .slot-row {
   display: grid;
-  grid-template-columns: 22px 36px 52px 1fr auto;
+  grid-template-columns: 22px 36px 52px 1fr auto auto;
   align-items: center;
   gap: 7px;
   padding: 7px 10px;
@@ -862,6 +976,35 @@ canvas {
   cursor: pointer;
   transition: background 0.08s, border-color 0.08s;
   user-select: none;
+}
+
+.slot-order-controls {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slot-arrow {
+  min-width: 22px;
+  min-height: 16px;
+  padding: 0 4px;
+  border: 2px solid #141414;
+  background: #fff;
+  color: #141414;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #141414;
+}
+
+.slot-arrow:hover:not(:disabled) {
+  background: #ffe0c2;
+}
+
+.slot-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .slot-row:hover {

@@ -55,80 +55,51 @@ const kiaClub = {
 };
 
 const kiaBatters = [
-  batter("박찬호", "SS/2B", "R", 84, 55, 88, 82, "리드오프", "컨택과 작전, 도루 시동"),
-  batter("김선빈", "2B/DH", "R", 91, 52, 66, 76, "교타자", "끈질긴 승부와 높은 컨택"),
-  batter("김도영", "3B", "R", 86, 94, 93, 60, "슈퍼스타", "장타, 주루, 클러치 모두 상급"),
-  batter("최형우", "DH/LF", "L", 83, 91, 38, 34, "해결사", "득점권과 장타 보정"),
+  batter("김도영", "3B/DH", "R", 86, 94, 93, 60, "슈퍼스타", "장타·주루·클러치 모두 상급"),
+  batter("김선빈", "2B/SS", "R", 91, 52, 66, 76, "교타자", "높은 컨택, 끈질긴 승부"),
   batter("나성범", "RF/DH", "L", 77, 94, 58, 35, "거포", "직구 공략 장타 보정"),
-  batter("위즈덤", "1B/3B", "R", 67, 97, 47, 24, "장타 머신", "완벽 타이밍 홈런 보정"),
-  batter("이우성", "1B/RF", "R", 73, 76, 60, 48, "찬스", "중거리 타구 안정"),
-  batter("김태군", "C", "R", 69, 63, 42, 72, "안방", "번트와 작전 수행"),
-  batter("최원준", "CF/RF", "L", 76, 58, 87, 78, "스피드", "1루타 때 추가 진루 확률 증가"),
-  batter("윤도현", "2B/3B", "R", 71, 73, 72, 54, "영건", "성장형 밸런스"),
-  batter("오선우", "1B/OF", "L", 61, 85, 44, 28, "한 방", "대타 장타형"),
-  batter("고종욱", "OF/DH", "L", 79, 55, 77, 66, "대타", "좌투 상대 컨택 안정"),
-  batter("한준수", "C", "L", 65, 75, 44, 44, "포수", "포수 장타 옵션"),
-  batter("김호령", "CF", "R", 65, 54, 92, 76, "대주자", "도루/수비형"),
-  batter("김석환", "1B/OF", "L", 58, 87, 46, 30, "거포 유망주", "뜬공도 장타 확률"),
-  batter("황대인", "1B", "R", 64, 83, 38, 22, "파워", "낮은 컨택 높은 장타"),
-  batter("홍종표", "IF", "L", 68, 48, 81, 80, "작전", "번트 성공 보정"),
-  batter("김규성", "IF", "L", 67, 52, 75, 72, "유틸", "멀티 포지션"),
-  batter("변우혁", "1B/3B", "R", 61, 86, 43, 24, "장타", "실투 장타 보정"),
-  batter("서건창", "IF/DH", "L", 78, 50, 70, 76, "베테랑", "볼넷 확률 보정"),
-  batter("박재현", "OF", "R", 63, 50, 84, 70, "백업", "대주자/대수비"),
-  batter("박정우", "OF", "L", 60, 47, 87, 68, "스피드", "도루 후보"),
-  batter("이창진", "OF", "R", 73, 62, 70, 60, "출루", "중하위 연결"),
+  batter("한준수", "C/DH", "L", 67, 78, 46, 44, "젊은 포수", "포수 장타 옵션"),
+  batter("오선우", "1B/OF", "L", 63, 86, 46, 28, "한 방", "장타형 1루"),
+  batter("정현창", "2B/SS/3B", "R", 76, 62, 80, 66, "차세대", "수비/주루형 내야"),
+  batter("박재현", "OF", "R", 64, 52, 84, 70, "외야", "대주자·대수비"),
+  batter("김태군", "C/DH", "R", 69, 63, 42, 72, "안방", "번트·작전 수행"),
+  batter("김호령", "CF", "R", 65, 54, 92, 76, "대주자", "도루·수비형 외야"),
+  batter("김규성", "IF/UTIL", "L", 67, 52, 75, 72, "유틸", "멀티 포지션"),
+  batter("박정우", "OF", "L", 62, 50, 87, 68, "스피드", "도루 후보"),
   batter("박민", "SS", "R", 66, 50, 73, 72, "수비형", "하위 타순 안정"),
-  batter("데일", "SS/2B", "S", 80, 64, 79, 64, "외국인 테이블세터", "출루와 선구 보정"),
-  batter("카스트로", "LF/IF", "L", 75, 78, 63, 40, "외국인 타자", "좌중간 장타"),
-  batter("이호연", "1B/IF", "L", 72, 65, 61, 56, "전천후", "컨택형 1루 옵션"),
-  batter("주효상", "C", "L", 61, 58, 40, 58, "포수 뎁스", "수비형 포수"),
   batter("한승연", "OF", "R", 62, 60, 74, 62, "외야 뎁스", "백업 외야"),
-  batter("박상준", "1B", "R", 60, 72, 42, 28, "우타 1루", "플래툰 파워"),
 ];
 
 const starters = [
   pitcher("네일", 88, 86, 88, 92, "선발 에이스", ["투심", "스위퍼", "체인지업", "커브"], "R", "무브먼트와 땅볼 유도"),
   pitcher("올러", 91, 76, 74, 88, "외국인 선발", ["직구", "슬라이더", "체인지업", "커브"], "R", "구위형 선발"),
   pitcher("양현종", 78, 90, 82, 94, "베테랑 선발", ["직구", "슬라이더", "체인지업", "커브"], "L", "제구와 완급 조절"),
-  pitcher("김도현", 86, 72, 70, 82, "파워 선발", ["직구", "슬라이더", "투심", "커브"], "R", "빠른 공 중심"),
-  pitcher("윤영철", 74, 86, 78, 84, "좌완 선발", ["직구", "체인지업", "슬라이더", "커브"], "L", "체인지업 타이밍 빼앗기"),
-  pitcher("김건국", 76, 78, 66, 78, "대체 선발", ["직구", "커브", "체인지업", "투심"], "R", "긴 이닝 백업"),
-  pitcher("선동열", 96, 94, 96, 99, "레전드", ["직구", "슬라이더", "스위퍼", "커브"], "R", "게임용 레전드 카드"),
   pitcher("이의리", 90, 68, 86, 80, "복귀 좌완", ["직구", "슬라이더", "체인지업", "커브"], "L", "높은 구위, 흔들리는 제구"),
   pitcher("황동하", 82, 76, 70, 78, "젊은 선발", ["직구", "슬라이더", "투심", "체인지업"], "R", "성장형 로테이션"),
-  pitcher("김시훈", 84, 75, 76, 76, "스윙맨", ["직구", "슬라이더", "체인지업", "커브"], "R", "선발/불펜 겸업"),
+  pitcher("김민규", 84, 78, 72, 80, "선발", ["직구", "슬라이더", "체인지업", "커브"], "R", "5선발 후보"),
 ];
 
 const bullpenGroups = {
+  "마무리": [pitcher("정해영", 91, 82, 88, 64, "마무리", ["직구", "슬라이더", "스위퍼"], "R", "9회 마무리")],
   "필승조": [
     pitcher("조상우", 94, 78, 84, 70, "필승조", ["직구", "슬라이더", "커브"], "R", "강한 직구"),
-    pitcher("전상현", 88, 82, 80, 68, "필승조", ["직구", "슬라이더", "체인지업"], "R", "위기 관리"),
+    pitcher("최지민", 86, 77, 86, 64, "필승조", ["직구", "슬라이더", "커브"], "L", "좌완 변화구"),
   ],
   "승리조": [
-    pitcher("최지민", 86, 77, 86, 64, "승리조", ["직구", "슬라이더", "커브"], "L", "좌완 변화구"),
-    pitcher("이준영", 80, 84, 78, 62, "승리조", ["직구", "슬라이더", "체인지업"], "L", "좌타 상대"),
     pitcher("성영탁", 84, 76, 75, 62, "승리조", ["직구", "투심", "슬라이더"], "R", "중간 계투"),
+    pitcher("김범수", 87, 70, 82, 56, "승리조", ["직구", "슬라이더", "커브"], "L", "좌완 파워"),
   ],
   "추격조": [
-    pitcher("김대유", 78, 80, 72, 60, "추격조", ["직구", "슬라이더", "체인지업"], "L", "좌완 추격"),
-    pitcher("임기영", 77, 84, 80, 66, "추격조", ["직구", "체인지업", "커브"], "R", "롱릴리프"),
-    pitcher("홍원빈", 85, 70, 68, 58, "추격조", ["직구", "슬라이더", "투심"], "R", "구위형"),
-    pitcher("김현수", 81, 76, 74, 58, "추격조", ["직구", "커브", "체인지업"], "L", "좌완 뎁스"),
-    pitcher("김범수", 87, 70, 82, 56, "추격조", ["직구", "슬라이더", "커브"], "L", "게임용 좌완 파워"),
+    pitcher("곽도규", 85, 72, 78, 58, "추격조", ["직구", "슬라이더", "커브"], "L", "좌완 영건"),
     pitcher("홍민규", 83, 72, 70, 54, "추격조", ["직구", "슬라이더", "체인지업"], "R", "추격 불펜"),
+    pitcher("한재승", 81, 74, 72, 56, "추격조", ["직구", "슬라이더", "체인지업"], "R", "롱릴리프"),
+    pitcher("이형범", 80, 78, 74, 60, "추격조", ["직구", "투심", "슬라이더"], "R", "베테랑 불펜"),
   ],
-  "패전조": [
-    pitcher("윤중현", 76, 78, 68, 56, "패전조", ["직구", "슬라이더", "커브"], "R", "이닝 소화"),
-    pitcher("김민주", 82, 68, 72, 55, "패전조", ["직구", "투심", "슬라이더"], "R", "젊은 불펜"),
-  ],
-  "원포인트": [pitcher("이호민", 78, 82, 76, 48, "원포인트", ["직구", "슬라이더", "체인지업"], "L", "좌타 원포인트")],
-  "마무리": [pitcher("정해영", 91, 82, 88, 64, "마무리", ["직구", "슬라이더", "스위퍼"], "R", "9회 마무리")],
 };
 
 const aiTeams = [
-  opponentTeam("삼성", "박진만", "대구", ["김지찬", "이재현", "구자욱", "디아즈", "강민호", "김영웅", "류지혁", "김헌곤", "전병우"], ["원태인", "후라도", "레예스"], ["김재윤", "임창민", "이승현", "오승환"], "#1d62ad"),
-  opponentTeam("LG", "염경엽", "잠실", ["홍창기", "문성주", "김현수", "오스틴", "문보경", "오지환", "박동원", "신민재", "박해민"], ["임찬규", "손주영", "치리노스"], ["유영찬", "김진성", "함덕주", "정우영"], "#c3042f"),
+  opponentTeam("삼성", "박진만", "대구", ["김지찬", "박승규", "구자욱", "최형우", "디아즈", "전병우", "강민호", "이재현", "박계범"], ["원태인", "후라도", "미야지"], ["김재윤", "최원태", "최지광", "임기영"], "#1d62ad"),
+  opponentTeam("LG", "염경엽", "잠실", ["홍창기", "박해민", "오스틴", "오지환", "박동원", "신민재", "문정빈", "구본혁", "천성호"], ["임찬규", "손주영", "송승기"], ["김진성", "함덕주", "장현식", "이정용"], "#c3042f"),
   opponentTeam("한화", "김경문", "대전", ["문현빈", "페라자", "노시환", "채은성", "안치홍", "하주석", "최재훈", "이진영", "황영묵"], ["류현진", "폰세", "문동주"], ["주현상", "김서현", "한승혁", "박상원"], "#f37321"),
   opponentTeam("두산", "조성환", "잠실", ["정수빈", "허경민", "양의지", "김재환", "양석환", "강승호", "라모스", "박준영", "조수행"], ["곽빈", "최원준", "브랜든"], ["홍건희", "김택연", "이영하", "최지강"], "#111111"),
   opponentTeam("롯데", "김태형", "사직", ["윤동희", "고승민", "전준우", "레이예스", "나승엽", "손호영", "박승욱", "유강남", "황성빈"], ["박세웅", "반즈", "나균안"], ["김원중", "구승민", "최준용", "진해수"], "#002955"),
@@ -140,14 +111,14 @@ const aiTeams = [
 
 const expandedTeamData = {
   삼성: {
-    batters: ["김지찬", "이재현", "구자욱", "디아즈", "강민호", "김영웅", "류지혁", "김헌곤", "전병우", "이성규", "김성윤", "이병헌", "김현준", "공민규", "김재상", "안주형"],
-    starters: ["원태인", "후라도", "레예스", "백정현", "이승현", "황동재"],
-    bullpen: ["김재윤", "임창민", "오승환", "김태훈", "최하늘", "육선엽", "김대우", "이호성"],
+    batters: ["김지찬", "박승규", "구자욱", "최형우", "디아즈", "전병우", "강민호", "이재현", "박계범", "김상준", "김헌곤", "류지혁", "장승현", "김성윤"],
+    starters: ["원태인", "후라도", "미야지", "백정현", "양창섭", "배찬승"],
+    bullpen: ["김재윤", "최원태", "최지광", "임기영", "이승민", "이재희", "장찬희", "오러클린", "김무신"],
   },
   LG: {
-    batters: ["홍창기", "박해민", "오스틴", "문보경", "오지환", "박동원", "신민재", "문성주", "김현수", "천성호", "구본혁", "이영빈", "문정빈", "이재원", "김현종", "최승민"],
-    starters: ["임찬규", "송승기", "톨허스트", "이정용", "손주영", "김윤식"],
-    bullpen: ["김진성", "함덕주", "장현식", "김영우", "우강훈", "박시원", "백승현", "유영찬"],
+    batters: ["홍창기", "박해민", "오스틴", "오지환", "박동원", "신민재", "문정빈", "구본혁", "천성호", "김현종", "송찬의", "이영빈", "이재원", "박시원", "이주헌"],
+    starters: ["임찬규", "손주영", "송승기", "김윤식", "톨허스트", "웰스"],
+    bullpen: ["김진성", "함덕주", "장현식", "이정용", "우강훈", "백승현", "김영우", "김진수"],
   },
   한화: {
     batters: ["문현빈", "페라자", "노시환", "채은성", "안치홍", "하주석", "최재훈", "이진영", "황영묵", "김태연", "장진혁", "이도윤", "권광민", "이원석", "유로결"],
@@ -188,7 +159,7 @@ const expandedTeamData = {
 
 applyExpandedTeamData(aiTeams);
 
-const defaultLineupNames = ["박찬호", "김선빈", "김도영", "최형우", "나성범", "위즈덤", "이우성", "김태군", "최원준"];
+const defaultLineupNames = ["김도영", "김선빈", "나성범", "한준수", "오선우", "정현창", "박재현", "김태군", "김호령"];
 
 const teamVisuals = {
   "KIA 타이거즈": { shortName: "KIA", color: "#d71920", secondaryColor: "#111111", textColor: "#ffffff", logo: "assets/team-logos/kia-tigers.png", fallbackLogo: "assets/HT.png" },
@@ -287,6 +258,13 @@ const game = {
   aiSwingPoint: 0.78,
   warning: "",
   impact: { timer: 0, shake: 0, color: "#ffffff" },
+  inningRuns: { top: [], bottom: [] },
+  inningHits: { top: [], bottom: [] },
+  inningErrors: { top: [], bottom: [] },
+  totalHits: { top: 0, bottom: 0 },
+  pitchCounts: {},
+  matchBatterStats: {},
+  matchPitcherStats: {},
 };
 
 let lastTime = 0;
@@ -674,7 +652,8 @@ function chooseOpponentTeam() {
 
 function getDefaultLineup(team = currentUserTeam()) {
   const slots = autoFillSlots(team);
-  return LINEUP_POSITIONS.map((pos) => slots[pos]).filter(Boolean).slice(0, 9);
+  const order = loadSavedLineupOrder(team);
+  return order.map((pos) => slots[pos]).filter(Boolean).slice(0, 9);
 }
 
 function lineupStorageKey(team = currentUserTeam()) {
@@ -687,6 +666,10 @@ function pitcherStorageKey(team = currentUserTeam()) {
 
 function lineupSlotsStorageKey(team = currentUserTeam()) {
   return `fullcount:lineupSlots:${team.name}`;
+}
+
+function lineupOrderStorageKey(team = currentUserTeam()) {
+  return `fullcount:lineupOrder:${team.name}`;
 }
 
 function loadSavedLineupSlots(team = currentUserTeam()) {
@@ -705,6 +688,24 @@ function loadSavedLineupSlots(team = currentUserTeam()) {
     }
   } catch {}
   return autoFillSlots(team);
+}
+
+function loadSavedLineupOrder(team = currentUserTeam()) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(lineupOrderStorageKey(team)));
+    if (Array.isArray(saved) && saved.length === 9 && new Set(saved).size === 9 && saved.every((p) => LINEUP_POSITIONS.includes(p))) {
+      return saved;
+    }
+  } catch {}
+  return [...LINEUP_POSITIONS];
+}
+
+function saveLineupOrder(team, order) {
+  localStorage.setItem(lineupOrderStorageKey(team), JSON.stringify(order));
+}
+
+function orderedLineupPositions(team = currentUserTeam()) {
+  return loadSavedLineupOrder(team);
 }
 
 function init() {
@@ -752,8 +753,103 @@ function resetGame(toIntro = true) {
   game.pitchDelay = 0.75;
   game.buntMode = false;
   game.paused = false;
+  game.inningRuns = { top: [], bottom: [] };
+  game.inningHits = { top: [], bottom: [] };
+  game.inningErrors = { top: [], bottom: [] };
+  game.totalHits = { top: 0, bottom: 0 };
+  game.pitchCounts = {};
+  game.matchBatterStats = {};
+  game.matchPitcherStats = {};
   syncCurrentMatchup();
   renderUI(true);
+}
+
+function ensureInningSlot(half, inning) {
+  const arr = game.inningRuns[half];
+  while (arr.length < inning) arr.push(0);
+  while (game.inningHits[half].length < inning) game.inningHits[half].push(0);
+  while (game.inningErrors[half].length < inning) game.inningErrors[half].push(0);
+}
+
+function recordRuns(count) {
+  if (!count) return;
+  const half = game.half;
+  ensureInningSlot(half, game.inning);
+  game.inningRuns[half][game.inning - 1] += count;
+}
+
+function recordHit() {
+  const half = game.half;
+  ensureInningSlot(half, game.inning);
+  game.inningHits[half][game.inning - 1] += 1;
+  game.totalHits[half] = (game.totalHits[half] || 0) + 1;
+}
+
+function incrementPitchCount(pitcherName) {
+  if (!pitcherName) return;
+  game.pitchCounts[pitcherName] = (game.pitchCounts[pitcherName] || 0) + 1;
+}
+
+function ensureBatterStat(name, teamName) {
+  if (!game.matchBatterStats[name]) {
+    game.matchBatterStats[name] = { team: teamName || "", AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0 };
+  }
+  return game.matchBatterStats[name];
+}
+
+function ensurePitcherStat(name, teamName) {
+  if (!game.matchPitcherStats[name]) {
+    game.matchPitcherStats[name] = { team: teamName || "", outs: 0, H: 0, HR: 0, BB: 0, SO: 0, ER: 0, pitches: 0 };
+  }
+  return game.matchPitcherStats[name];
+}
+
+function offenseTeamName() {
+  return (game.half === "top" ? currentUserTeam() : game.aiTeam)?.name || "";
+}
+
+function defenseTeamName() {
+  return (game.half === "top" ? game.aiTeam : currentUserTeam())?.name || "";
+}
+
+function recordBattingOutcome(result, runsScored = 0) {
+  const batter = game.currentBatter;
+  if (!batter) return;
+  const bs = ensureBatterStat(batter.name, offenseTeamName());
+  const pitcherObj = battingPitcher();
+  const ps = pitcherObj ? ensurePitcherStat(pitcherObj.name, defenseTeamName()) : null;
+  const hitResults = ["1루타", "2루타", "3루타", "홈런", "만루홈런", "번트안타"];
+  const inPlayOuts = ["땅볼아웃", "플라이아웃", "병살타"];
+  if (hitResults.includes(result) || inPlayOuts.includes(result) || result === "삼진") {
+    bs.AB += 1;
+  }
+  if (hitResults.includes(result)) {
+    bs.H += 1;
+    if (ps) ps.H += 1;
+    if (result === "2루타") bs["2B"] += 1;
+    if (result === "3루타") bs["3B"] += 1;
+    if (result === "홈런" || result === "만루홈런") {
+      bs.HR += 1;
+      if (ps) ps.HR += 1;
+    }
+    recordHit();
+  }
+  if (runsScored > 0) {
+    bs.RBI += runsScored;
+    if (result !== "볼넷" && result !== "밀어내기 볼넷") {
+      if (ps) ps.ER = (ps.ER || 0) + runsScored;
+    } else if (ps && runsScored > 0) {
+      ps.ER = (ps.ER || 0) + runsScored;
+    }
+  }
+  if (result === "삼진") {
+    bs.SO += 1;
+    if (ps) ps.SO += 1;
+  }
+  if (result === "볼넷" || result === "밀어내기 볼넷") {
+    bs.BB += 1;
+    if (ps) ps.BB += 1;
+  }
 }
 
 function setupTeams() {
@@ -1828,9 +1924,94 @@ function drawGameHUD() {
 
   ctx.fillStyle = "#5a8468";
   ctx.font = "700 10px Segoe UI";
-  ctx.fillText(`구 ${pitcherObj?.velocity || "-"}   제 ${pitcherObj?.control || "-"}   체 ${Math.round(pitcherObj?.stamina || 0)}`, W - 84, 122);
+  const pitchCnt = pitcherObj?.name ? (game.pitchCounts[pitcherObj.name] || 0) : 0;
+  ctx.fillText(`구 ${pitcherObj?.velocity || "-"}   체 ${Math.round(pitcherObj?.stamina || 0)}   투구 ${pitchCnt}`, W - 84, 122);
 
   ctx.restore();
+  drawInningStrip();
+}
+
+function drawInningStrip() {
+  if (!game.aiTeam) return;
+  const ut = currentUserTeam();
+  const op = game.aiTeam;
+  const stripY = 142;
+  const stripH = 28;
+  const inningsToShow = Math.max(9, game.inning);
+  const colW = 19;
+  const labelW = 54;
+  const tailW = 64;
+  const totalW = labelW + colW * inningsToShow + tailW;
+  const startX = W / 2 - totalW / 2;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(6,12,7,0.92)";
+  ctx.fillRect(startX, stripY, totalW, stripH);
+  ctx.strokeStyle = "rgba(80,140,90,0.4)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(startX, stripY, totalW, stripH);
+
+  ctx.fillStyle = "#a9c2b0";
+  ctx.font = "900 9px Segoe UI";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+
+  for (let i = 0; i < inningsToShow; i += 1) {
+    const cx = startX + labelW + colW * i + colW / 2;
+    ctx.fillStyle = "#9ab4a0";
+    ctx.fillText(String(i + 1), cx, stripY + 5);
+  }
+  ctx.fillStyle = "#f4c24d";
+  ctx.fillText("R", startX + labelW + colW * inningsToShow + 12, stripY + 5);
+  ctx.fillText("H", startX + labelW + colW * inningsToShow + 32, stripY + 5);
+  ctx.fillText("E", startX + labelW + colW * inningsToShow + 52, stripY + 5);
+
+  ctx.strokeStyle = "rgba(120,160,120,0.18)";
+  ctx.beginPath();
+  ctx.moveTo(startX + 4, stripY + 10);
+  ctx.lineTo(startX + totalW - 4, stripY + 10);
+  ctx.stroke();
+
+  drawInningRow(ut, "top", startX, stripY + 16, labelW, colW, inningsToShow, tailW);
+  drawInningRow(op, "bottom", startX, stripY + 24, labelW, colW, inningsToShow, tailW);
+  ctx.restore();
+}
+
+function drawInningRow(team, half, startX, y, labelW, colW, inningsToShow, tailW) {
+  const runs = game.inningRuns[half] || [];
+  const hits = game.inningHits[half] || [];
+  ctx.fillStyle = team?.color || "#888";
+  ctx.font = "900 10px Segoe UI";
+  ctx.textAlign = "left";
+  ctx.fillText(team?.shortName || team?.name || "-", startX + 6, y);
+
+  ctx.font = "800 10px Segoe UI";
+  ctx.textAlign = "center";
+  let totalR = 0;
+  let totalH = game.totalHits[half] || 0;
+  for (let i = 0; i < inningsToShow; i += 1) {
+    const cx = startX + labelW + colW * i + colW / 2;
+    const val = runs[i];
+    const isCurrent = game.inning - 1 === i && game.half === half;
+    if (val === undefined && i >= game.inning) {
+      ctx.fillStyle = "rgba(150,170,150,0.35)";
+      ctx.fillText("-", cx, y);
+    } else if (val === undefined) {
+      ctx.fillStyle = "rgba(180,180,180,0.5)";
+      ctx.fillText("-", cx, y);
+    } else {
+      totalR += val;
+      ctx.fillStyle = isCurrent ? "#f4c24d" : "#f0ece4";
+      ctx.fillText(String(val), cx, y);
+    }
+  }
+  ctx.fillStyle = "#f4c24d";
+  ctx.font = "900 11px Segoe UI";
+  ctx.fillText(String(totalR), startX + labelW + colW * inningsToShow + 12, y);
+  ctx.fillStyle = "#e0d8c8";
+  ctx.fillText(String(totalH), startX + labelW + colW * inningsToShow + 32, y);
+  ctx.fillStyle = "#e0d8c8";
+  ctx.fillText("0", startX + labelW + colW * inningsToShow + 52, y);
 }
 
 function drawBatting() {
@@ -2585,6 +2766,11 @@ function startPitch(pitchType, mode, options = {}) {
   game.isPitching = true;
   game.playPhase = mode === "batting" ? "공 날아옴" : "투구 중";
   decreasePitcherStamina(pitcherObj);
+  if (pitcherObj?.name) {
+    incrementPitchCount(pitcherObj.name);
+    const ps = ensurePitcherStat(pitcherObj.name, defenseTeamName());
+    ps.pitches = (ps.pitches || 0) + 1;
+  }
   if (options.onlineDefenseThrow) {
     game.state = "batting";
     game.onlineWaiting = false;
@@ -2671,11 +2857,12 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
   }
 
   if (contactQuality >= 0.68 && timingDiff < 30 && contactScore > 68) {
-    if (sweet && powerScore > 132 && roll < 0.54) return basesLoaded ? "만루홈런" : "홈런";
-    if (powerScore > 112 && batter.speed > 72 && roll < 0.12) return "3루타";
-    if (powerScore > 96 && roll < 0.34) return "2루타";
+    if (sweet && powerScore > 118 && roll < 0.72) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 108 && roll < 0.32) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 100 && batter.speed > 72 && roll < 0.14) return "3루타";
+    if (powerScore > 90 && roll < 0.38) return "2루타";
     if (hasForceAtSecond && contactScore < 75 && roll < 0.08) return "병살타";
-    return roll < 0.78 ? "1루타" : roll < 0.9 ? "플라이아웃" : "땅볼아웃";
+    return roll < 0.74 ? "1루타" : roll < 0.86 ? "2루타" : "플라이아웃";
   }
 
   if (contactQuality < 0.18) return "파울";
@@ -2690,16 +2877,18 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
     return "파울";
   }
 
-  if (sweet && powerScore > 134 && roll < 0.62) return basesLoaded ? "만루홈런" : "홈런";
-  if (sweet && powerScore > 116 && batter.speed > 72 && roll < 0.18) return "3루타";
-  if (sweet && powerScore > 102 && roll < 0.5) return "2루타";
+  if (sweet && powerScore > 120 && roll < 0.78) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 104 && roll < 0.42) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 96 && batter.speed > 72 && roll < 0.18) return "3루타";
+  if (sweet && powerScore > 90 && roll < 0.52) return "2루타";
 
   if (hasForceAtSecond && contactScore < 76 && roll < 0.18) return "병살타";
   if (contactQuality < 0.58 && roll < 0.28) return powerScore > 98 ? "플라이아웃" : "땅볼아웃";
-  if (powerScore > 126 && contactScore > 82 && roll < 0.18) return "홈런";
-  if (powerScore > 104 && contactScore > 76 && roll < 0.3) return "2루타";
-  if (powerScore > 108 && batter.speed > 78 && roll < 0.10) return "3루타";
-  return roll < 0.72 ? "1루타" : roll < 0.82 ? "2루타" : roll < 0.9 ? "파울" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
+  if (powerScore > 112 && contactScore > 76 && roll < 0.32) return "홈런";
+  if (powerScore > 100 && contactScore > 72 && roll < 0.18) return "홈런";
+  if (powerScore > 96 && contactScore > 74 && roll < 0.34) return "2루타";
+  if (powerScore > 100 && batter.speed > 78 && roll < 0.12) return "3루타";
+  return roll < 0.62 ? "1루타" : roll < 0.78 ? "2루타" : roll < 0.86 ? "홈런" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
 }
 
 function isSwingInContactWindow() {
@@ -2866,14 +3055,15 @@ function chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff
     return "1루타";
   }
 
-  if (powerScore > 130 && solidContact && roll < 0.18 + fatigue * 0.08) return "홈런";
-  if (powerScore > 112 && solidContact && roll < 0.28) return batter.speed > 78 && roll < 0.08 ? "3루타" : "2루타";
+  if (powerScore > 116 && solidContact && roll < 0.32 + fatigue * 0.1) return "홈런";
+  if (powerScore > 104 && solidContact && roll < 0.18) return "홈런";
+  if (powerScore > 100 && solidContact && roll < 0.36) return batter.speed > 78 && roll < 0.08 ? "3루타" : "2루타";
   if (forceAtSecond && contactScore < 74 && roll < 0.18) return "병살타";
-  if (roll < 0.34) return "땅볼아웃";
-  if (roll < 0.58) return "플라이아웃";
-  if (roll < 0.84) return "1루타";
-  if (roll < 0.94) return "2루타";
-  return powerScore > 118 ? "홈런" : "파울";
+  if (roll < 0.30) return "땅볼아웃";
+  if (roll < 0.52) return "플라이아웃";
+  if (roll < 0.76) return "1루타";
+  if (roll < 0.88) return "2루타";
+  return powerScore > 104 ? "홈런" : "파울";
 }
 
 function resolveTakenPitch(mode) {
@@ -2911,9 +3101,12 @@ function applyHitResult(result) {
       game.bases.third = null;
       animateRunner(thirdRunner, "third", "home");
       scoreRun(1);
+      recordRuns(1);
+      recordBattingOutcome("희생플라이", 1);
       recordOut(1, "희생플라이!");
       return;
     }
+    recordBattingOutcome(result, 0);
     recordOut(1, `${label}!`);
     return;
   }
@@ -2923,12 +3116,15 @@ function applyHitResult(result) {
     animateRunner(runner, "home", "first");
     queueOutThrow(battedBall, "second", 0.08);
     if (game.bases.first) game.bases.first = null;
+    recordBattingOutcome("병살타", 0);
     recordOut(Math.min(2, 3 - game.outs), "병살타!");
     return;
   }
   const bases = result === "2루타" ? 2 : result === "3루타" ? 3 : result === "홈런" || result === "만루홈런" ? 4 : 1;
   const battedBall = startHitAnimation(result, bases === 4 ? 520 : 190 + bases * 80, bases === 4 ? "#ffd34d" : "#fff");
   const play = advanceRunners(bases, runner, battedBall, result);
+  recordRuns(play.runs);
+  recordBattingOutcome(result, play.runs);
   const suffix = play.outs ? ` · ${play.outBaseLabel} 송구 아웃!` : "!";
   finishPlateAppearance(`${label}${suffix}`);
 }
@@ -3159,11 +3355,18 @@ function walkBatter() {
   animateRunner(runner, "home", "first");
   game.bases.first = runner;
   scoreRun(runs);
+  recordRuns(runs);
+  recordBattingOutcome(runs ? "밀어내기 볼넷" : "볼넷", runs);
   finishPlateAppearance(runs ? "밀어내기 볼넷!" : "볼넷!");
 }
 
 function recordOut(count, text) {
   game.outs = clamp(game.outs + count, 0, 3);
+  const pitcherObj = battingPitcher();
+  if (pitcherObj?.name) {
+    const ps = ensurePitcherStat(pitcherObj.name, defenseTeamName());
+    ps.outs += count;
+  }
   resetCount();
   nextBatter();
   showResult(text, resultDurationWithThrow(1.15), () => {
@@ -3413,6 +3616,7 @@ function addStrike(text, foul = false) {
   const isThird = game.strikes >= 3;
   if (isThird) {
     game.strikes = 0;
+    recordBattingOutcome("삼진", 0);
     recordOut(1, "삼진!");
     return;
   }
@@ -3770,13 +3974,39 @@ function handleMouseClick(e) {
   if (action === "confirmLineup") {
     const filledCount = LINEUP_POSITIONS.filter((p) => game.lineupSlots[p]).length;
     if (filledCount !== 9) return;
-    game.selectedLineup = LINEUP_POSITIONS.map((p) => game.lineupSlots[p]);
+    const team = currentUserTeam();
+    const order = loadSavedLineupOrder(team);
+    game.selectedLineup = order.map((p) => game.lineupSlots[p]).filter(Boolean);
     const slotNames = {};
     for (const pos of LINEUP_POSITIONS) slotNames[pos] = game.lineupSlots[pos].name;
     localStorage.setItem(lineupSlotsStorageKey(), JSON.stringify(slotNames));
     localStorage.setItem(lineupStorageKey(), JSON.stringify(game.selectedLineup.map((b) => b.name)));
     game.state = "pitcherSelect";
     renderUI(true);
+  }
+  if (action === "lineupOrderUp" || action === "lineupOrderDown") {
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    const team = currentUserTeam();
+    const order = loadSavedLineupOrder(team);
+    const idx = order.indexOf(slot);
+    if (idx < 0) return;
+    const newIdx = action === "lineupOrderUp" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= order.length) return;
+    [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+    saveLineupOrder(team, order);
+    renderUI(true);
+  }
+  if (action === "mt-orderUp" || action === "mt-orderDown") {
+    const slot = e.target.closest("[data-slot]")?.dataset.slot;
+    const team = loadSavedTeam();
+    const order = loadSavedLineupOrder(team);
+    const idx = order.indexOf(slot);
+    if (idx < 0) return;
+    const newIdx = action === "mt-orderUp" ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= order.length) return;
+    [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+    saveLineupOrder(team, order);
+    window.fullcountAuth?.refreshMyTeam?.();
   }
   if (action === "assignBatter") assignBatterToSlot(e.target.closest("[data-batter]").dataset.batter);
   if (action === "selectPitcher") selectPitcher(currentUserTeam().starters.find((p) => p.name === e.target.closest("[data-pitcher]").dataset.pitcher));
@@ -4053,7 +4283,8 @@ function renderMyTeamPanel() {
     </button>`;
   }).join("");
 
-  const slotsHtml = LINEUP_POSITIONS.map((pos, i) => {
+  const order = loadSavedLineupOrder(team);
+  const slotsHtml = order.map((pos, i) => {
     const player = slots[pos];
     const isActive = pos === activeSlot;
     return `<div class="slot-row${isActive ? " active" : ""}${player ? " filled" : ""}" data-action="mt-selectSlot" data-slot="${pos}">
@@ -4061,6 +4292,10 @@ function renderMyTeamPanel() {
       <span class="pos-badge">${pos}</span>
       <span class="pos-kr">${POSITION_KR[pos]}</span>
       <span class="slot-player">${player ? player.name : "—"}</span>
+      <span class="slot-order-controls">
+        <button class="slot-arrow" data-action="mt-orderUp" data-slot="${pos}" ${i === 0 ? "disabled" : ""}>▲</button>
+        <button class="slot-arrow" data-action="mt-orderDown" data-slot="${pos}" ${i === order.length - 1 ? "disabled" : ""}>▼</button>
+      </span>
       ${player ? `<button class="slot-clear" data-action="mt-clearSlot" data-slot="${pos}">×</button>` : ""}
     </div>`;
   }).join("");
@@ -4156,8 +4391,9 @@ function renderLineupSelect() {
   const activeSlot = game.activeLineupSlot;
   const filledCount = LINEUP_POSITIONS.filter((p) => slots[p]).length;
   const assignedNames = new Set(Object.values(slots).map((b) => b.name));
+  const order = loadSavedLineupOrder(team);
 
-  const slotsHtml = LINEUP_POSITIONS.map((pos, i) => {
+  const slotsHtml = order.map((pos, i) => {
     const player = slots[pos];
     const isActive = pos === activeSlot;
     return `
@@ -4166,6 +4402,10 @@ function renderLineupSelect() {
         <span class="pos-badge">${pos}</span>
         <span class="pos-kr">${POSITION_KR[pos]}</span>
         <span class="slot-player">${player ? player.name : "—"}</span>
+        <span class="slot-order-controls">
+          <button class="slot-arrow" data-action="lineupOrderUp" data-slot="${pos}" ${i === 0 ? "disabled" : ""}>▲</button>
+          <button class="slot-arrow" data-action="lineupOrderDown" data-slot="${pos}" ${i === order.length - 1 ? "disabled" : ""}>▼</button>
+        </span>
         ${player ? `<button class="slot-clear" data-action="clearSlot" data-slot="${pos}">×</button>` : ""}
       </div>
     `;
@@ -4410,6 +4650,7 @@ function saveRecord() {
     opponent: game.aiTeam.name,
   };
   localStorage.setItem("fullcount:record", JSON.stringify(game.record));
+  saveSeasonStats();
   window.fullcountAuth?.saveMatch?.({
     userTeam: currentUserTeam().name,
     opponentTeam: game.aiTeam.name,
@@ -4418,6 +4659,84 @@ function saveRecord() {
     innings: game.inning,
   });
 }
+
+function loadSeasonStats() {
+  try {
+    return JSON.parse(localStorage.getItem("fullcount:season")) || { batters: {}, pitchers: {}, teams: {}, matches: [] };
+  } catch {
+    return { batters: {}, pitchers: {}, teams: {}, matches: [] };
+  }
+}
+
+function saveSeasonStats() {
+  const season = loadSeasonStats();
+  // batter stats
+  for (const [name, m] of Object.entries(game.matchBatterStats)) {
+    if (!season.batters[name]) season.batters[name] = { team: m.team, AB: 0, H: 0, HR: 0, RBI: 0, R: 0, BB: 0, SO: 0, "2B": 0, "3B": 0, G: 0 };
+    const s = season.batters[name];
+    s.team = m.team || s.team;
+    s.AB += m.AB || 0;
+    s.H += m.H || 0;
+    s.HR += m.HR || 0;
+    s.RBI += m.RBI || 0;
+    s.R += m.R || 0;
+    s.BB += m.BB || 0;
+    s.SO += m.SO || 0;
+    s["2B"] += m["2B"] || 0;
+    s["3B"] += m["3B"] || 0;
+    s.G += 1;
+  }
+  // pitcher stats
+  for (const [name, m] of Object.entries(game.matchPitcherStats)) {
+    if (!season.pitchers[name]) season.pitchers[name] = { team: m.team, outs: 0, H: 0, HR: 0, BB: 0, SO: 0, ER: 0, pitches: 0, G: 0, W: 0, L: 0 };
+    const s = season.pitchers[name];
+    s.team = m.team || s.team;
+    s.outs += m.outs || 0;
+    s.H += m.H || 0;
+    s.HR += m.HR || 0;
+    s.BB += m.BB || 0;
+    s.SO += m.SO || 0;
+    s.ER += m.ER || 0;
+    s.pitches += m.pitches || 0;
+    s.G += 1;
+  }
+  // team standings — both sides count
+  const userName = currentUserTeam().name;
+  const aiName = game.aiTeam?.name || "AI";
+  for (const teamName of [userName, aiName]) {
+    if (!season.teams[teamName]) season.teams[teamName] = { W: 0, L: 0, T: 0, RS: 0, RA: 0, G: 0 };
+  }
+  const userT = season.teams[userName];
+  const aiT = season.teams[aiName];
+  userT.RS += game.userScore;
+  userT.RA += game.aiScore;
+  userT.G += 1;
+  aiT.RS += game.aiScore;
+  aiT.RA += game.userScore;
+  aiT.G += 1;
+  if (game.userScore > game.aiScore) { userT.W += 1; aiT.L += 1; }
+  else if (game.userScore < game.aiScore) { userT.L += 1; aiT.W += 1; }
+  else { userT.T += 1; aiT.T += 1; }
+  // match log (keep last 50)
+  season.matches.unshift({
+    date: new Date().toISOString(),
+    userTeam: userName,
+    aiTeam: aiName,
+    userScore: game.userScore,
+    aiScore: game.aiScore,
+    innings: game.inning,
+    inningRuns: { top: [...game.inningRuns.top], bottom: [...game.inningRuns.bottom] },
+  });
+  season.matches = season.matches.slice(0, 50);
+  localStorage.setItem("fullcount:season", JSON.stringify(season));
+}
+
+window.fullcountSeason = {
+  load: loadSeasonStats,
+  reset() {
+    localStorage.removeItem("fullcount:season");
+  },
+};
 
 function loadRecord() {
   try {
@@ -4430,7 +4749,8 @@ function loadRecord() {
 function loadSavedLineup(team = currentUserTeam()) {
   try {
     const slots = loadSavedLineupSlots(team);
-    const lineup = LINEUP_POSITIONS.map((p) => slots[p]).filter(Boolean);
+    const order = loadSavedLineupOrder(team);
+    const lineup = order.map((p) => slots[p]).filter(Boolean);
     if (lineup.length === 9) return lineup;
   } catch {}
   return getDefaultLineup(team);
