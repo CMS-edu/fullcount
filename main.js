@@ -3253,22 +3253,92 @@ function resolvePitchingResult(aiSwung) {
   const powerScore = batter.power + batter.launch * 0.12 + randomInt(-15, 15) - pitchDifficulty * 0.2 + diffMod.power;
   game.ball.active = false;
 
-  if (timingDiff > 60 || contactScore < 26) {
-    if (Math.random() < 0.5) {
-      addStrike("AI 헛스윙!");
-      return;
-    }
-    if (powerScore > 88 && Math.random() < 0.18) { applyHitResult("홈런"); return; }
-    applyHitResult(Math.random() < 0.34 ? "1루타" : "땅볼아웃");
+  // Total whiff
+  if (timingDiff > 64 && contactScore < 24) {
+    addStrike("AI 헛스윙!");
     return;
   }
-  if (contactScore < 44 || Math.random() < 0.14) {
+
+  const physics = computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, timingDiff, fatigue });
+  game.lastContact = {
+    ...physics,
+    quality: physics.totalQuality,
+    contactScore,
+    powerScore,
+    timingDiff,
+    batter,
+  };
+
+  if (physics.foul) {
     addStrike("파울!", true);
     startHitAnimation("파울", 150, "#f7f7f7");
     return;
   }
-  const result = chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff, fatigue });
+  if (physics.isHR) {
+    const basesLoaded = game.bases.first && game.bases.second && game.bases.third;
+    applyHitResult(basesLoaded ? "만루홈런" : "홈런");
+    return;
+  }
+  const result = decideHitResultFromPhysics(physics, batter);
   applyHitResult(result);
+}
+
+// AI side has no manual bat swing → synthesize along/timing from contactScore
+// + timingDiff and run the same physics + landing+fielder outcome logic.
+function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, timingDiff, fatigue }) {
+  const qualityRaw = clamp((contactScore - 30) / 80, 0, 1);
+  // Synthesize how close to sweet spot the AI's bat would have been
+  const along = clamp(0.5 + qualityRaw * 0.28 + (Math.random() - 0.5) * 0.20, 0.18, 0.95);
+  const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
+  const totalQuality = qualityRaw * 0.55 + sweetSpot * 0.45;
+
+  // Bad timing → foul/off-balance flag handled by physics
+  const timingSign = Math.random() < 0.5 ? -1 : 1;
+  const timing = timingSign * timingDiff / 100;
+
+  const exitVel = clamp(
+    powerScore * 0.58 + totalQuality * 80 - timingDiff * 0.55 + randomInt(-10, 12),
+    32, 185
+  );
+
+  const launchDeg = clamp(
+    (along - 0.55) * 95 + (batter.launch || 60) * 0.16 - 14 + randomInt(-7, 7),
+    -32, 75
+  );
+
+  const pullSide = batter.bats === "L" ? 1 : -1;
+  const sprayDeg = clamp(
+    -timing * pullSide * 220 + (batter.pull || 0) * 28 + randomInt(-24, 24),
+    -52, 52
+  );
+
+  const launchRad = launchDeg * Math.PI / 180;
+  const sprayRad = sprayDeg * Math.PI / 180;
+  let carry;
+  if (launchDeg < 4) carry = exitVel * 1.65 + 80;
+  else carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 78 + 70;
+  carry = clamp(carry, 80, 640);
+
+  const hangTime = launchDeg > 5
+    ? clamp(0.5 + (exitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
+    : 0.42;
+
+  const landingX = FIELD.plate.x + carry * Math.sin(sprayRad);
+  const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
+
+  const fair = isInFairTerritory(landingX, landingY);
+  const isHR = fair && launchDeg > 18 && carry > 430 && landingY < 95;
+  const isPopup = launchDeg > 52;
+  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
+  const isLineDrive = launchDeg > 6 && launchDeg <= 22 && exitVel > 70;
+  const isGroundBall = launchDeg <= 6;
+
+  return {
+    totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
+    along, carry, hangTime, landingX, landingY,
+    fair, foul: !fair, isHR,
+    isFlyBall, isLineDrive, isGroundBall, isPopup,
+  };
 }
 
 function chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff, fatigue }) {
