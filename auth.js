@@ -450,11 +450,12 @@ function renderStandings(season) {
       const pct = (s.W || 0) + (s.L || 0) > 0 ? (s.W / ((s.W) + (s.L))) : 0;
       const diff = (s.RS || 0) - (s.RA || 0);
       return { name, games, ...s, pct, diff };
-    })
-    .sort((a, b) => b.pct - a.pct || (b.diff || 0) - (a.diff || 0));
+    });
   if (!teams.length) return `<p class="rec-empty">아직 등록된 팀 기록이 없습니다.</p>`;
-  let lead = teams[0];
-  const rows = teams.map((t, i) => {
+  const sorted = applySort(teams, "season-standings");
+  const lead = applySort(teams, "season-standings")[0] || teams[0];
+  const ctx = "season-standings";
+  const rows = sorted.map((t, i) => {
     const gap = i === 0 ? "-" : (((lead.W - t.W) + (t.L - lead.L)) / 2).toFixed(1);
     return `<tr>
       <td class="rec-rank">${i + 1}</td>
@@ -472,7 +473,7 @@ function renderStandings(season) {
   }).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>경기</th><th>승</th><th>패</th><th>무</th><th>승률</th><th>게임차</th><th>득점</th><th>실점</th><th>득실</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th>${sortableTh("경기", "games", ctx)}${sortableTh("승", "W", ctx)}${sortableTh("패", "L", ctx)}${sortableTh("무", "T", ctx)}${sortableTh("승률", "pct", ctx)}<th>게임차</th>${sortableTh("득점", "RS", ctx)}${sortableTh("실점", "RA", ctx, "asc")}${sortableTh("득실", "diff", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -489,10 +490,11 @@ function renderBattingTable(season) {
       const ISO = SLG - AVG;
       return { name, ...s, TB, AVG, OBP, SLG, OPS, ISO };
     })
-    .filter((b) => b.AB >= 1)
-    .sort((a, b) => b.AVG - a.AVG || b.H - a.H);
+    .filter((b) => b.AB >= 1);
   if (!list.length) return `<p class="rec-empty">아직 타격 기록이 없습니다. 한 경기를 마치면 표시됩니다.</p>`;
-  const rows = list.slice(0, 30).map((b, i) => `
+  const ctx = "season-batting";
+  const sorted = applySort(list, ctx);
+  const rows = sorted.slice(0, 50).map((b, i) => `
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(b.team || "-")}</td>
@@ -516,7 +518,7 @@ function renderBattingTable(season) {
     </tr>`).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>타수</th><th>안타</th><th>2B</th><th>3B</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th><th>루타</th><th>타율</th><th>출루율</th><th>장타율</th><th>OPS</th><th>ISO</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th>${sortableTh("G", "G", ctx)}${sortableTh("타수", "AB", ctx)}${sortableTh("안타", "H", ctx)}${sortableTh("2B", "2B", ctx)}${sortableTh("3B", "3B", ctx)}${sortableTh("홈런", "HR", ctx)}${sortableTh("타점", "RBI", ctx)}${sortableTh("득점", "R", ctx)}${sortableTh("볼넷", "BB", ctx)}${sortableTh("삼진", "SO", ctx, "asc")}${sortableTh("루타", "TB", ctx)}${sortableTh("타율", "AVG", ctx)}${sortableTh("출루율", "OBP", ctx)}${sortableTh("장타율", "SLG", ctx)}${sortableTh("OPS", "OPS", ctx)}${sortableTh("ISO", "ISO", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -527,13 +529,52 @@ function recPhotoMarkup(team, name) {
   return `<img class="rec-photo" src="${escapeHtml(url)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.style.display='none'" />`;
 }
 
+// ── Sortable headers ─────────────────────────────────────────────
+function defaultSort(ctx) {
+  return {
+    "season-batting": { key: "AVG", dir: "desc" },
+    "season-hr": { key: "HR", dir: "desc" },
+    "season-pitching": { key: "ERA", dir: "asc" },
+    "season-standings": { key: "pct", dir: "desc" },
+    "league-batting": { key: "OPS", dir: "desc" },
+    "league-pitching": { key: "ERA", dir: "asc" },
+    "league-standings": { key: "pct", dir: "desc" },
+  }[ctx] || { key: "", dir: "desc" };
+}
+
+function getSort(ctx) {
+  authState.sort = authState.sort || {};
+  if (!authState.sort[ctx]) authState.sort[ctx] = defaultSort(ctx);
+  return authState.sort[ctx];
+}
+
+function sortableTh(label, key, ctx, defaultDir = "desc") {
+  const cur = getSort(ctx);
+  const isCurrent = cur.key === key;
+  const arrow = isCurrent ? (cur.dir === "desc" ? " ▼" : " ▲") : "";
+  return `<th class="sort-th${isCurrent ? " sort-active" : ""}" data-sort-key="${key}" data-sort-ctx="${ctx}" data-sort-default="${defaultDir}">${label}${arrow}</th>`;
+}
+
+function applySort(arr, ctx) {
+  const { key, dir } = getSort(ctx);
+  if (!key) return arr;
+  const mult = dir === "desc" ? -1 : 1;
+  return [...arr].sort((a, b) => {
+    const av = a[key];
+    const bv = b[key];
+    if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv) * mult;
+    return ((av || 0) - (bv || 0)) * mult;
+  });
+}
+
 function renderHRTable(season) {
   const list = Object.entries(season.batters || {})
-    .map(([name, s]) => ({ name, ...s }))
-    .filter((b) => (b.HR || 0) > 0)
-    .sort((a, b) => b.HR - a.HR || b.RBI - a.RBI);
+    .map(([name, s]) => ({ name, ...s, AVG: s.AB > 0 ? s.H / s.AB : 0 }))
+    .filter((b) => (b.HR || 0) > 0);
   if (!list.length) return `<p class="rec-empty">아직 홈런이 없습니다.</p>`;
-  const rows = list.slice(0, 30).map((b, i) => `
+  const ctx = "season-hr";
+  const sorted = applySort(list, ctx);
+  const rows = sorted.slice(0, 40).map((b, i) => `
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(b.team || "-")}</td>
@@ -542,11 +583,11 @@ function renderHRTable(season) {
       <td>${b.RBI}</td>
       <td>${b.H}</td>
       <td>${b.AB}</td>
-      <td>${b.AB > 0 ? (b.H / b.AB).toFixed(3) : "-"}</td>
+      <td>${b.AB > 0 ? b.AVG.toFixed(3) : "-"}</td>
     </tr>`).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>홈런</th><th>타점</th><th>안타</th><th>타수</th><th>타율</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th>${sortableTh("홈런", "HR", ctx)}${sortableTh("타점", "RBI", ctx)}${sortableTh("안타", "H", ctx)}${sortableTh("타수", "AB", ctx)}${sortableTh("타율", "AVG", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -564,16 +605,18 @@ function renderPitchingTable(season) {
       return { name, ...s, ip, era, whip, k9, bb9, hr9, kbb };
     })
     .filter((p) => p.outs > 0)
-    .sort((a, b) => a.era - b.era);
+    .map((p) => ({ ...p, IP: p.ip, ERA: p.era, WHIP: p.whip, K9: p.k9, BB9: p.bb9, HR9: p.hr9, KBB: p.kbb, W: p.W || 0, L: p.L || 0 }));
   if (!list.length) return `<p class="rec-empty">아직 투수 기록이 없습니다.</p>`;
-  const rows = list.slice(0, 30).map((p, i) => `
+  const ctx = "season-pitching";
+  const sorted = applySort(list, ctx);
+  const rows = sorted.slice(0, 50).map((p, i) => `
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(p.team || "-")}</td>
       <td class="rec-player">${recPhotoMarkup(p.team, p.name)}<span>${escapeHtml(p.name)}</span></td>
       <td>${p.G}</td>
-      <td>${p.W || 0}</td>
-      <td>${p.L || 0}</td>
+      <td>${p.W}</td>
+      <td>${p.L}</td>
       <td>${ipFormat(p.outs)}</td>
       <td>${p.H}</td>
       <td>${p.HR}</td>
@@ -581,16 +624,16 @@ function renderPitchingTable(season) {
       <td>${p.SO}</td>
       <td>${p.ER}</td>
       <td>${p.pitches}</td>
-      <td class="rec-pos">${p.ip > 0 ? p.era.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.whip.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.k9.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.bb9.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.hr9.toFixed(2) : "-"}</td>
-      <td>${p.kbb > 0 ? p.kbb.toFixed(2) : "-"}</td>
+      <td class="rec-pos">${p.IP > 0 ? p.ERA.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.WHIP.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.K9.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.BB9.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.HR9.toFixed(2) : "-"}</td>
+      <td>${p.KBB > 0 ? p.KBB.toFixed(2) : "-"}</td>
     </tr>`).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>승</th><th>패</th><th>이닝</th><th>피안타</th><th>피홈런</th><th>4사구</th><th>K</th><th>자책</th><th>투구수</th><th>ERA</th><th>WHIP</th><th>K/9</th><th>BB/9</th><th>HR/9</th><th>K/BB</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th>${sortableTh("G", "G", ctx)}${sortableTh("승", "W", ctx)}${sortableTh("패", "L", ctx, "asc")}${sortableTh("이닝", "outs", ctx)}${sortableTh("피안타", "H", ctx, "asc")}${sortableTh("피홈런", "HR", ctx, "asc")}${sortableTh("4사구", "BB", ctx, "asc")}${sortableTh("K", "SO", ctx)}${sortableTh("자책", "ER", ctx, "asc")}${sortableTh("투구수", "pitches", ctx)}${sortableTh("ERA", "ERA", ctx, "asc")}${sortableTh("WHIP", "WHIP", ctx, "asc")}${sortableTh("K/9", "K9", ctx)}${sortableTh("BB/9", "BB9", ctx, "asc")}${sortableTh("HR/9", "HR9", ctx, "asc")}${sortableTh("K/BB", "KBB", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -642,16 +685,16 @@ function buildRoundRobinSchedule(teamNames) {
   return rounds.flat();
 }
 
-function createLeague({ name, teams, innings, userTeam, userName }) {
+function createLeague({ name, teams, innings, playerTeams }) {
   const leagues = loadLeagues();
   const id = "L" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const league = {
     id,
     name: name || `리그 ${leagues.length + 1}`,
     teams,
+    playerTeams: Array.isArray(playerTeams) ? playerTeams.filter((t) => teams.includes(t)) : [],
     innings: [1, 3, 5, 7, 9].includes(Number(innings)) ? Number(innings) : 5,
     schedule: buildRoundRobinSchedule(teams),
-    participants: userTeam ? [{ team: userTeam, user: userName || "P1" }] : [],
     createdAt: new Date().toISOString(),
     standings: Object.fromEntries(teams.map((t) => [t, { W: 0, L: 0, T: 0, RS: 0, RA: 0, G: 0 }])),
     batters: {},
@@ -686,14 +729,18 @@ function leagueTemplate() {
 
 function renderLeagueList(leagues) {
   const teams = window.fullcountGame?.teams?.() || [];
-  const teamCheckboxes = teams.map((t) => `<label class="lg-team-pick"><input type="checkbox" name="leagueTeams" value="${escapeHtml(t.name)}"/> ${escapeHtml(t.name)}</label>`).join("");
-  const userTeamOptions = teams.map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("");
+  const teamCheckboxes = teams.map((t) => `
+    <div class="lg-team-row">
+      <label class="lg-team-pick"><input type="checkbox" name="leagueTeams" value="${escapeHtml(t.name)}" data-lg-team-toggle/> ${escapeHtml(t.name)}</label>
+      <label class="lg-player-pick"><input type="checkbox" name="leaguePlayerTeams" value="${escapeHtml(t.name)}" data-lg-player-toggle/> 👤 직접 조작</label>
+    </div>`).join("");
   const list = leagues.length ? leagues.map((l) => {
     const played = l.schedule.filter((m) => m.result).length;
+    const players = (l.playerTeams || []).length;
     return `<li class="lg-list-row">
       <div>
         <strong>${escapeHtml(l.name)}</strong>
-        <span class="muted">${l.teams.length}팀 · ${l.innings}이닝 · ${played}/${l.schedule.length}경기 완료</span>
+        <span class="muted">${l.teams.length}팀 (직접 ${players}) · ${l.innings}이닝 · ${played}/${l.schedule.length}경기 완료</span>
       </div>
       <div class="lg-list-actions">
         <button data-lg-action="open" data-lg-id="${l.id}">열기</button>
@@ -718,11 +765,8 @@ function renderLeagueList(leagues) {
             <option value="9">9이닝</option>
           </select>
         </label>
-        <label>내 팀
-          <select name="userTeam">${userTeamOptions}</select>
-        </label>
         <fieldset class="lg-team-pickset">
-          <legend>참가 팀 선택 (2팀 이상)</legend>
+          <legend>참가 팀 + 직접 조작할 팀(👤) 선택 (2팀 이상)</legend>
           ${teamCheckboxes}
         </fieldset>
         <button class="primary" type="submit">리그 생성 + 라운드로빈 스케줄 자동 생성</button>
@@ -739,13 +783,14 @@ function renderLeagueDetail(league) {
   else if (tab === "batting") body = renderLeagueBatters(league);
   else if (tab === "pitching") body = renderLeaguePitchers(league);
   else if (tab === "awards") body = renderLeagueAwards(league);
-  const userParticipant = league.participants.find((p) => p.user === (authState.user?.username || "P1"));
+  const playerTeams = (league.playerTeams || []);
+  const playerLabel = playerTeams.length ? "직접 조작 팀: " + playerTeams.map(escapeHtml).join(", ") : "직접 조작 팀 없음";
   return `
     <div class="auth-card records-card">
       <div class="lg-header">
         <p class="eyebrow">LEAGUE · ${escapeHtml(league.id)}</p>
         <h2>${escapeHtml(league.name)}</h2>
-        <p class="muted">${league.teams.length}팀 · ${league.innings}이닝 · ${userParticipant ? "내 팀: " + escapeHtml(userParticipant.team) : "참가 중 아님"}</p>
+        <p class="muted">${league.teams.length}팀 · ${league.innings}이닝 · ${playerLabel}</p>
       </div>
       <div class="rec-tabs">
         ${tabBtn("standings", "순위표")}
@@ -760,15 +805,16 @@ function renderLeagueDetail(league) {
 }
 
 function renderLeagueStandings(league) {
-  const rows = Object.entries(league.standings)
+  const teams = Object.entries(league.standings)
     .map(([name, s]) => {
       const pct = (s.W + s.L) > 0 ? s.W / (s.W + s.L) : 0;
       const diff = (s.RS || 0) - (s.RA || 0);
       return { name, ...s, pct, diff };
-    })
-    .sort((a, b) => b.pct - a.pct || b.diff - a.diff);
-  const lead = rows[0];
-  const html = rows.map((t, i) => {
+    });
+  const ctx = "league-standings";
+  const sorted = applySort(teams, ctx);
+  const lead = applySort(teams, { key: "pct", dir: "desc" } ? "league-standings" : "league-standings")[0] || teams[0];
+  const html = sorted.map((t, i) => {
     const gap = i === 0 ? "-" : (((lead.W - t.W) + (t.L - lead.L)) / 2).toFixed(1);
     return `<tr>
       <td class="rec-rank">${i + 1}</td>
@@ -786,30 +832,36 @@ function renderLeagueStandings(league) {
   }).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>G</th><th>승</th><th>패</th><th>무</th><th>승률</th><th>게임차</th><th>득점</th><th>실점</th><th>득실</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th>${sortableTh("G", "G", ctx)}${sortableTh("승", "W", ctx)}${sortableTh("패", "L", ctx)}${sortableTh("무", "T", ctx)}${sortableTh("승률", "pct", ctx)}<th>게임차</th>${sortableTh("득점", "RS", ctx)}${sortableTh("실점", "RA", ctx, "asc")}${sortableTh("득실", "diff", ctx)}</tr></thead>
       <tbody>${html}</tbody>
     </table>`;
 }
 
 function renderLeagueSchedule(league) {
-  const userTeam = league.participants.find((p) => p.user === (authState.user?.username || "P1"))?.team;
+  const playerTeams = league.playerTeams || [];
   const rows = league.schedule.map((m, i) => {
-    const userInvolved = userTeam && (m.home === userTeam || m.away === userTeam);
+    const homePlayer = playerTeams.includes(m.home);
+    const awayPlayer = playerTeams.includes(m.away);
+    const userInvolved = homePlayer || awayPlayer;
     const isPlayed = !!m.result;
+    const bothPlayers = homePlayer && awayPlayer;
     let actionBtn;
     if (isPlayed) {
       const r = m.result;
       actionBtn = `<span class="muted">${r.home} ${r.homeScore} - ${r.awayScore} ${r.away}</span>`;
     } else if (userInvolved) {
-      actionBtn = `<button class="primary" data-lg-action="play" data-lg-match="${i}">경기 시작</button>`;
+      const label = bothPlayers ? "P vs P 경기" : "경기 시작";
+      actionBtn = `<button class="primary" data-lg-action="play" data-lg-match="${i}">${label}</button>`;
     } else {
       actionBtn = `<button data-lg-action="sim" data-lg-match="${i}">AI 시뮬레이션</button>`;
     }
+    const homeBadge = homePlayer ? " 👤" : "";
+    const awayBadge = awayPlayer ? " 👤" : "";
     return `<tr>
       <td>${i + 1}</td>
-      <td class="rec-team">${escapeHtml(m.home)}</td>
+      <td class="rec-team">${escapeHtml(m.home)}${homeBadge}</td>
       <td class="muted">vs</td>
-      <td class="rec-team">${escapeHtml(m.away)}</td>
+      <td class="rec-team">${escapeHtml(m.away)}${awayBadge}</td>
       <td>${actionBtn}</td>
     </tr>`;
   }).join("");
@@ -834,10 +886,11 @@ function renderLeagueBatters(league) {
       const OPS = OBP + SLG;
       return { name, ...s, TB, AVG, OBP, SLG, OPS };
     })
-    .filter((b) => b.AB >= 1)
-    .sort((a, b) => b.OPS - a.OPS || b.HR - a.HR);
+    .filter((b) => b.AB >= 1);
   if (!list.length) return `<p class="rec-empty">아직 경기 결과가 없습니다.</p>`;
-  const rows = list.slice(0, 40).map((b, i) => `
+  const ctx = "league-batting";
+  const sorted = applySort(list, ctx);
+  const rows = sorted.slice(0, 60).map((b, i) => `
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(b.team || "-")}</td>
@@ -857,7 +910,7 @@ function renderLeagueBatters(league) {
     </tr>`).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>타수</th><th>안타</th><th>홈런</th><th>타점</th><th>득점</th><th>볼넷</th><th>삼진</th><th>타율</th><th>출루율</th><th>장타율</th><th>OPS</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th>${sortableTh("G", "G", ctx)}${sortableTh("타수", "AB", ctx)}${sortableTh("안타", "H", ctx)}${sortableTh("홈런", "HR", ctx)}${sortableTh("타점", "RBI", ctx)}${sortableTh("득점", "R", ctx)}${sortableTh("볼넷", "BB", ctx)}${sortableTh("삼진", "SO", ctx, "asc")}${sortableTh("타율", "AVG", ctx)}${sortableTh("출루율", "OBP", ctx)}${sortableTh("장타율", "SLG", ctx)}${sortableTh("OPS", "OPS", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -872,29 +925,31 @@ function renderLeaguePitchers(league) {
       return { name, ...s, ip, era, whip, k9 };
     })
     .filter((p) => p.outs > 0)
-    .sort((a, b) => a.era - b.era);
+    .map((p) => ({ ...p, IP: p.ip, ERA: p.era, WHIP: p.whip, K9: p.k9, W: p.W || 0, L: p.L || 0 }));
   if (!list.length) return `<p class="rec-empty">아직 투수 기록이 없습니다.</p>`;
-  const rows = list.slice(0, 40).map((p, i) => `
+  const ctx = "league-pitching";
+  const sorted = applySort(list, ctx);
+  const rows = sorted.slice(0, 60).map((p, i) => `
     <tr>
       <td class="rec-rank">${i + 1}</td>
       <td class="rec-team">${escapeHtml(p.team || "-")}</td>
       <td class="rec-player">${recPhotoMarkup(p.team, p.name)}<span>${escapeHtml(p.name)}</span></td>
       <td>${p.G || 0}</td>
-      <td>${p.W || 0}</td>
-      <td>${p.L || 0}</td>
+      <td>${p.W}</td>
+      <td>${p.L}</td>
       <td>${ipFormat(p.outs)}</td>
       <td>${p.H}</td>
       <td>${p.HR}</td>
       <td>${p.BB}</td>
       <td>${p.SO}</td>
       <td>${p.ER}</td>
-      <td class="rec-pos">${p.ip > 0 ? p.era.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.whip.toFixed(2) : "-"}</td>
-      <td>${p.ip > 0 ? p.k9.toFixed(2) : "-"}</td>
+      <td class="rec-pos">${p.IP > 0 ? p.ERA.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.WHIP.toFixed(2) : "-"}</td>
+      <td>${p.IP > 0 ? p.K9.toFixed(2) : "-"}</td>
     </tr>`).join("");
   return `
     <table class="rec-table">
-      <thead><tr><th>순위</th><th>팀</th><th>선수</th><th>G</th><th>승</th><th>패</th><th>이닝</th><th>피안타</th><th>피홈런</th><th>4사구</th><th>K</th><th>자책</th><th>ERA</th><th>WHIP</th><th>K/9</th></tr></thead>
+      <thead><tr><th>순위</th><th>팀</th><th>선수</th>${sortableTh("G", "G", ctx)}${sortableTh("승", "W", ctx)}${sortableTh("패", "L", ctx, "asc")}${sortableTh("이닝", "outs", ctx)}${sortableTh("피안타", "H", ctx, "asc")}${sortableTh("피홈런", "HR", ctx, "asc")}${sortableTh("4사구", "BB", ctx, "asc")}${sortableTh("K", "SO", ctx)}${sortableTh("자책", "ER", ctx, "asc")}${sortableTh("ERA", "ERA", ctx, "asc")}${sortableTh("WHIP", "WHIP", ctx, "asc")}${sortableTh("K/9", "K9", ctx)}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -939,24 +994,44 @@ function renderLeagueAwards(league) {
     </div>`;
 }
 
+function teamStrength(teamName) {
+  const roster = window.fullcountGame?.getTeamRoster?.(teamName);
+  if (!roster) return { offense: 70, defense: 70 };
+  const offense = roster.batters.reduce((s, b) => s + (b.power * 0.55 + b.contact * 0.35 + b.speed * 0.1), 0) / Math.max(1, roster.batters.length);
+  const defense = roster.pitchers.reduce((s, p) => s + (p.velocity * 0.4 + p.control * 0.4 + p.breaking * 0.2), 0) / Math.max(1, roster.pitchers.length);
+  return { offense, defense };
+}
+
 function simulateLeagueMatch(league, home, away) {
-  const homeAdv = 0.04;
-  const inningRuns = (advantage) => {
-    const r = Math.random() - advantage;
-    if (r > 0.62) return 0;
-    if (r > 0.42) return 1;
-    if (r > 0.24) return 2;
-    if (r > 0.12) return 3;
-    if (r > 0.04) return 4;
-    return 5 + Math.floor(Math.random() * 3);
+  const homeAdv = 0.05;
+  const hStr = teamStrength(home);
+  const aStr = teamStrength(away);
+  // Differential: home offense vs away defense, and vice-versa
+  const homeEdge = (hStr.offense - aStr.defense) / 160; // -0.2..0.2 typical
+  const awayEdge = (aStr.offense - hStr.defense) / 160;
+
+  // Probability that an inning produces ≥1 run for a given side
+  const scoreInningProb = (edge, advantage) => Math.max(0.06, Math.min(0.62, 0.30 + edge * 0.7 + advantage));
+
+  // Given the inning scored, distribution of runs (tone-matched to user games: 1-2 most common)
+  const inningRunsIfScored = (edge) => {
+    const r = Math.random() - Math.max(0, edge) * 0.35;
+    if (r > 0.78) return 4 + (Math.random() < 0.25 ? 1 : 0);
+    if (r > 0.60) return 3;
+    if (r > 0.34) return 2;
+    return 1;
   };
+
   let homeScore = 0, awayScore = 0;
   for (let i = 0; i < league.innings; i++) {
-    homeScore += inningRuns(homeAdv);
-    awayScore += inningRuns(0);
+    if (Math.random() < scoreInningProb(homeEdge, homeAdv)) homeScore += inningRunsIfScored(homeEdge);
+    if (Math.random() < scoreInningProb(awayEdge, 0)) awayScore += inningRunsIfScored(awayEdge);
   }
-  while (homeScore === awayScore) {
-    if (Math.random() < 0.5 + homeAdv) homeScore += 1; else awayScore += 1;
+  // Break ties
+  let guard = 0;
+  while (homeScore === awayScore && guard++ < 6) {
+    const flip = Math.random() < 0.5 + homeAdv + homeEdge * 0.4;
+    if (flip) homeScore += 1; else awayScore += 1;
   }
   return { homeScore, awayScore };
 }
@@ -1035,20 +1110,39 @@ function bindLeague() {
     const form = e.currentTarget;
     const data = new FormData(form);
     const selectedTeams = data.getAll("leagueTeams");
-    const userTeam = data.get("userTeam");
-    const teams = [...new Set([userTeam, ...selectedTeams])].filter(Boolean);
+    const playerTeams = data.getAll("leaguePlayerTeams").filter((p) => selectedTeams.includes(p));
+    const teams = [...new Set(selectedTeams)].filter(Boolean);
     if (teams.length < 2) {
-      alert("리그에는 최소 2팀이 필요합니다 (내 팀 포함).");
+      alert("리그에는 최소 2팀이 필요합니다.");
       return;
+    }
+    if (playerTeams.length === 0) {
+      if (!confirm("직접 조작할 팀이 한 팀도 없습니다. 모두 AI로 진행할까요?")) return;
     }
     createLeague({
       name: data.get("leagueName"),
       teams,
       innings: data.get("leagueInnings"),
-      userTeam,
-      userName: authState.user?.username || "P1",
+      playerTeams,
     });
     renderApp();
+  });
+  // When a 👤 checkbox is checked, auto-check the team checkbox
+  document.querySelectorAll("[data-lg-player-toggle]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        const teamCb = document.querySelector(`[data-lg-team-toggle][value="${cb.value}"]`);
+        if (teamCb) teamCb.checked = true;
+      }
+    });
+  });
+  document.querySelectorAll("[data-lg-team-toggle]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      if (!cb.checked) {
+        const playerCb = document.querySelector(`[data-lg-player-toggle][value="${cb.value}"]`);
+        if (playerCb) playerCb.checked = false;
+      }
+    });
   });
   document.querySelectorAll("[data-lg-action]").forEach((btn) => {
     btn.addEventListener("click", (e) => handleLeagueAction(btn, e));
@@ -1059,6 +1153,7 @@ function bindLeague() {
       renderApp();
     });
   });
+  bindSortHeaders();
 }
 
 function handleLeagueAction(btn, e) {
@@ -1096,10 +1191,10 @@ function handleLeagueAction(btn, e) {
   }
   if (action === "simAll") {
     updateLeague(activeId, (l) => {
-      const userTeam = l.participants[0]?.team;
+      const playerTeams = l.playerTeams || [];
       l.schedule.forEach((m, i) => {
         if (m.result) return;
-        if (userTeam && (m.home === userTeam || m.away === userTeam)) return;
+        if (playerTeams.includes(m.home) || playerTeams.includes(m.away)) return;
         const sim = simulateLeagueMatch(l, m.home, m.away);
         recordSimulatedMatch(l, i, sim);
       });
@@ -1112,7 +1207,17 @@ function handleLeagueAction(btn, e) {
     const league = getLeague(activeId);
     if (!league) return;
     const m = league.schedule[matchIdx];
-    window.fullcountGame?.startLeagueMatch?.({ leagueId: activeId, matchIdx, home: m.home, away: m.away, innings: league.innings });
+    const playerTeams = league.playerTeams || [];
+    let userSide = null;
+    if (playerTeams.includes(m.home) && playerTeams.includes(m.away)) {
+      const pick = prompt(`두 팀 모두 직접 조작 팀입니다. 어느 팀을 조작할까요?\n1: ${m.home}\n2: ${m.away}`, "1");
+      userSide = pick === "2" ? m.away : m.home;
+    } else if (playerTeams.includes(m.home)) {
+      userSide = m.home;
+    } else if (playerTeams.includes(m.away)) {
+      userSide = m.away;
+    }
+    window.fullcountGame?.startLeagueMatch?.({ leagueId: activeId, matchIdx, home: m.home, away: m.away, innings: league.innings, userTeam: userSide });
     authState.view = "game";
     renderApp();
   }
@@ -1130,6 +1235,21 @@ function bindRecords() {
         return;
       }
       authState.recordsTab = tab;
+      renderApp();
+    });
+  });
+  bindSortHeaders();
+}
+
+function bindSortHeaders() {
+  document.querySelectorAll("[data-sort-key]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const ctx = th.dataset.sortCtx;
+      const key = th.dataset.sortKey;
+      const def = th.dataset.sortDefault || "desc";
+      const cur = getSort(ctx);
+      if (cur.key === key) cur.dir = cur.dir === "desc" ? "asc" : "desc";
+      else { cur.key = key; cur.dir = def; }
       renderApp();
     });
   });

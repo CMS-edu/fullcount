@@ -2862,22 +2862,27 @@ function resolveBattingResult() {
   };
   game.ball.active = false;
 
-  if (timingDiff > 58 || contactScore < 38) {
-    if (Math.random() < 0.68) {
+  if (timingDiff > 72 || contactScore < 26) {
+    if (Math.random() < 0.55) {
       addStrike("파울!", true);
       startHitAnimation("파울", 145, "#f7f7f7");
       return;
     }
-    applyHitResult("땅볼아웃");
+    if (powerScore > 96 && Math.random() < 0.18) { applyHitResult("홈런"); return; }
+    applyHitResult(Math.random() < 0.36 ? "1루타" : "땅볼아웃");
     return;
   }
-  if (timingDiff > 38 || contactScore < 55) {
-    if (Math.random() < 0.42) {
+  if (timingDiff > 48 || contactScore < 42) {
+    if (Math.random() < 0.28) {
       addStrike("파울!", true);
       startHitAnimation("파울", 180, "#f7f7f7");
       return;
     }
-    applyHitResult(powerScore > 88 || Math.random() < 0.42 ? "플라이아웃" : "땅볼아웃");
+    if (powerScore > 92 && Math.random() < 0.22) { applyHitResult("홈런"); return; }
+    const r = Math.random();
+    if (r < 0.32) applyHitResult("1루타");
+    else if (r < 0.42) applyHitResult("2루타");
+    else applyHitResult(powerScore > 84 ? "플라이아웃" : "땅볼아웃");
     return;
   }
 
@@ -2907,13 +2912,14 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
     return hasForceAtSecond && roll < 0.28 ? "병살타" : "땅볼아웃";
   }
 
-  if (contactQuality >= 0.68 && timingDiff < 30 && contactScore > 68) {
-    if (sweet && powerScore > 118 && roll < 0.72) return basesLoaded ? "만루홈런" : "홈런";
-    if (powerScore > 108 && roll < 0.32) return basesLoaded ? "만루홈런" : "홈런";
-    if (powerScore > 100 && batter.speed > 72 && roll < 0.14) return "3루타";
-    if (powerScore > 90 && roll < 0.38) return "2루타";
-    if (hasForceAtSecond && contactScore < 75 && roll < 0.08) return "병살타";
-    return roll < 0.74 ? "1루타" : roll < 0.86 ? "2루타" : "플라이아웃";
+  if (contactQuality >= 0.62 && timingDiff < 34 && contactScore > 60) {
+    if (sweet && powerScore > 100 && roll < 0.82) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 92 && roll < 0.48) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 82 && roll < 0.28) return basesLoaded ? "만루홈런" : "홈런";
+    if (powerScore > 90 && batter.speed > 72 && roll < 0.18) return "3루타";
+    if (powerScore > 78 && roll < 0.48) return "2루타";
+    if (hasForceAtSecond && contactScore < 75 && roll < 0.06) return "병살타";
+    return roll < 0.82 ? "1루타" : "2루타";
   }
 
   if (contactQuality < 0.18) return "파울";
@@ -2928,18 +2934,19 @@ function chooseBattedBallResult({ batter, contact, contactQuality, contactScore,
     return "파울";
   }
 
-  if (sweet && powerScore > 120 && roll < 0.78) return basesLoaded ? "만루홈런" : "홈런";
-  if (sweet && powerScore > 104 && roll < 0.42) return basesLoaded ? "만루홈런" : "홈런";
-  if (sweet && powerScore > 96 && batter.speed > 72 && roll < 0.18) return "3루타";
-  if (sweet && powerScore > 90 && roll < 0.52) return "2루타";
+  if (sweet && powerScore > 104 && roll < 0.86) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 90 && roll < 0.58) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 78 && roll < 0.32) return basesLoaded ? "만루홈런" : "홈런";
+  if (sweet && powerScore > 82 && batter.speed > 72 && roll < 0.22) return "3루타";
+  if (sweet && powerScore > 78 && roll < 0.58) return "2루타";
 
-  if (hasForceAtSecond && contactScore < 76 && roll < 0.18) return "병살타";
-  if (contactQuality < 0.58 && roll < 0.28) return powerScore > 98 ? "플라이아웃" : "땅볼아웃";
-  if (powerScore > 112 && contactScore > 76 && roll < 0.32) return "홈런";
-  if (powerScore > 100 && contactScore > 72 && roll < 0.18) return "홈런";
-  if (powerScore > 96 && contactScore > 74 && roll < 0.34) return "2루타";
-  if (powerScore > 100 && batter.speed > 78 && roll < 0.12) return "3루타";
-  return roll < 0.62 ? "1루타" : roll < 0.78 ? "2루타" : roll < 0.86 ? "홈런" : powerScore > 94 ? "플라이아웃" : "땅볼아웃";
+  if (hasForceAtSecond && contactScore < 76 && roll < 0.14) return "병살타";
+  if (contactQuality < 0.5 && roll < 0.22) return powerScore > 92 ? "플라이아웃" : "땅볼아웃";
+  if (powerScore > 96 && contactScore > 70 && roll < 0.42) return "홈런";
+  if (powerScore > 86 && contactScore > 66 && roll < 0.28) return "홈런";
+  if (powerScore > 82 && contactScore > 68 && roll < 0.42) return "2루타";
+  if (powerScore > 90 && batter.speed > 78 && roll < 0.16) return "3루타";
+  return roll < 0.56 ? "1루타" : roll < 0.74 ? "2루타" : roll < 0.86 ? "홈런" : "1루타";
 }
 
 function isSwingInContactWindow() {
@@ -4921,17 +4928,28 @@ window.render_game_to_text = () =>
     result: game.resultText,
   });
 
-function startLeagueMatch({ leagueId, matchIdx, home, away, innings }) {
-  const userTeamName = currentUserTeam().name;
-  // user always controls userTeamName side; opponent is whichever team is not user's
+function startLeagueMatch({ leagueId, matchIdx, home, away, innings, userTeam: explicitUserTeam }) {
+  // If caller specifies which team the user controls (multi-player league), honor it.
+  // Otherwise default to the currently-selected user team if it matches one side,
+  // else default to home.
+  let userTeamName = explicitUserTeam;
+  if (!userTeamName) {
+    const current = currentUserTeam().name;
+    if (current === home || current === away) userTeamName = current;
+    else userTeamName = home;
+  }
   const opponentName = home === userTeamName ? away : home;
+  const userTeamObj = getTeamByName(userTeamName);
   const opponent = getTeamByName(opponentName);
-  if (!opponent) {
-    console.warn("league match: opponent team not found", opponentName);
+  if (!opponent || !userTeamObj) {
+    console.warn("league match: team not found", { userTeamName, opponentName });
     return;
   }
+  // Switch user team to the league-assigned side
+  game.userTeam = userTeamObj;
+  localStorage.setItem("fullcount:userTeam", userTeamObj.name);
   game.maxInnings = [1, 3, 5, 7, 9].includes(Number(innings)) ? Number(innings) : 9;
-  game.leagueContext = { leagueId, matchIdx, home, away };
+  game.leagueContext = { leagueId, matchIdx, home, away, userTeam: userTeamName };
   game.aiTeam = opponent;
   game.aiPitcher = clonePitcher(selectOpponentStarter());
   resetGame(false);

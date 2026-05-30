@@ -370,6 +370,22 @@ button:disabled {
   border-right: 1px solid #2a2a2a;
 }
 
+.rec-table thead th.sort-th {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.08s, color 0.08s;
+}
+
+.rec-table thead th.sort-th:hover {
+  background: #1a1a1a;
+  color: #ffd370;
+}
+
+.rec-table thead th.sort-active {
+  background: #d71920;
+  color: #fff4df;
+}
+
 .rec-table tbody td {
   padding: 6px;
   text-align: center;
@@ -523,6 +539,23 @@ button:disabled {
   margin: 4px 10px 4px 0;
   font-weight: 800;
   color: #f0ece4;
+}
+
+.lg-team-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 3px 4px;
+  border-bottom: 1px dashed #333;
+}
+
+.lg-player-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  color: #f4c24d;
+  font-size: 12px;
 }
 
 .lg-header {
