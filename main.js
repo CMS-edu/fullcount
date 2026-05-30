@@ -2095,7 +2095,7 @@ function drawResult() {
   const boxW = isHR ? 460 : 360;
   const boxH = isHR ? 80 : 62;
   const boxX = W / 2 - boxW / 2;
-  const boxY = 158;
+  const boxY = 180;
   const fade = Math.min(1, game.resultTimer / game.resultDuration);
 
   ctx.globalAlpha = 0.95 * fade;
@@ -2721,14 +2721,15 @@ function drawInfoCard(x, y, title, person, lines) {
 function drawCenterHint(text) {
   ctx.save();
   ctx.fillStyle = "#fff4df";
-  ctx.fillRect(W / 2 - 150, 146, 300, 44);
+  ctx.fillRect(W / 2 - 150, 184, 300, 40);
   ctx.strokeStyle = "#050505";
   ctx.lineWidth = 4;
-  ctx.strokeRect(W / 2 - 150, 146, 300, 44);
+  ctx.strokeRect(W / 2 - 150, 184, 300, 40);
   ctx.fillStyle = "#141414";
-  ctx.font = "900 22px Segoe UI";
+  ctx.font = "900 20px Segoe UI";
   ctx.textAlign = "center";
-  ctx.fillText(text, W / 2, 175);
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, W / 2, 204);
   ctx.restore();
 }
 
