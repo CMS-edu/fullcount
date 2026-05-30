@@ -3908,8 +3908,30 @@ function finishPlateAppearance(text) {
 }
 
 function resultDurationWithThrow(baseDuration) {
-  if (!game.throwBall) return baseDuration;
-  return Math.max(baseDuration, game.throwBall.delay + game.throwBall.duration + 0.72);
+  // Wait for everything still in motion before clearing to the next pitch:
+  // ball still flying, throw still in air, runners still on the basepaths,
+  // or a deferred tag play not yet resolved.
+  let needed = 0;
+  if (game.throwBall) {
+    const throwLeft = game.throwBall.delay + game.throwBall.duration - game.throwBall.timer;
+    needed = Math.max(needed, throwLeft);
+  }
+  if (game.hitBall && game.hitBall.t < 1) {
+    const ballLeft = (1 - game.hitBall.t) * game.hitBall.duration;
+    needed = Math.max(needed, ballLeft);
+  }
+  for (const anim of game.runnerAnimations) {
+    if (anim.t < 1) {
+      needed = Math.max(needed, (1 - anim.t) * anim.duration);
+    }
+  }
+  if (game.pendingTagPlay && !game.pendingTagPlay.resolved) {
+    const tag = game.pendingTagPlay;
+    const remaining = Math.max(tag.runnerArrivalAt, tag.throwArrivalAt) - tag.elapsed;
+    needed = Math.max(needed, remaining);
+  }
+  // Always give a settle buffer so the audience can read the result text
+  return Math.max(baseDuration, needed + 0.85);
 }
 
 function switchHalfInning(forceBottom = false) {
