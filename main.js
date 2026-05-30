@@ -68,6 +68,17 @@ const kiaBatters = [
   batter("박정우", "OF", "L", 62, 50, 87, 68, "스피드", "도루 후보"),
   batter("박민", "SS", "R", 66, 50, 73, 72, "수비형", "하위 타순 안정"),
   batter("한승연", "OF", "R", 62, 60, 74, 62, "외야 뎁스", "백업 외야"),
+  // 벤치 / 백업 (사진 미보유)
+  batter("박찬호", "SS/2B", "R", 84, 55, 88, 82, "리드오프 옵션", "컨택과 작전, 도루 시동"),
+  batter("이우성", "1B/RF", "R", 73, 76, 60, 48, "찬스 메이커", "중거리 안정"),
+  batter("최원준", "CF/RF", "L", 76, 58, 87, 78, "스피드", "발야구 1번 옵션"),
+  batter("윤도현", "2B/3B", "R", 71, 73, 72, 54, "영건", "성장형 내야수"),
+  batter("이창진", "OF", "R", 73, 62, 70, 60, "출루", "중하위 연결"),
+  batter("황대인", "1B", "R", 64, 83, 38, 22, "파워", "낮은 컨택 높은 장타"),
+  batter("변우혁", "1B/3B", "R", 61, 86, 43, 24, "장타", "실투 한 방"),
+  batter("김석환", "1B/OF", "L", 58, 87, 46, 30, "거포 유망주", "뜬공도 장타 확률"),
+  batter("홍종표", "IF", "L", 68, 48, 81, 80, "작전", "번트 성공 보정"),
+  batter("주효상", "C", "L", 61, 58, 40, 58, "포수 뎁스", "수비형 포수"),
 ];
 
 const starters = [
@@ -822,6 +833,14 @@ function recordHit() {
   ensureInningSlot(half, game.inning);
   game.inningHits[half][game.inning - 1] += 1;
   game.totalHits[half] = (game.totalHits[half] || 0) + 1;
+}
+
+function recordError(defenseTeam) {
+  // Errors are charged to the defense's half on the scoreboard.
+  // When user is batting (half="top"), defense is the bottom-half team.
+  const defenseHalf = game.half === "top" ? "bottom" : "top";
+  ensureInningSlot(defenseHalf, game.inning);
+  game.inningErrors[defenseHalf][game.inning - 1] += 1;
 }
 
 function incrementPitchCount(pitcherName) {
@@ -2056,13 +2075,15 @@ function drawInningRow(team, half, startX, y, labelW, colW, inningsToShow, tailW
       ctx.fillText(String(val), cx, y);
     }
   }
+  const errors = game.inningErrors[half] || [];
+  const totalE = errors.reduce((a, b) => a + (b || 0), 0);
   ctx.fillStyle = "#f4c24d";
   ctx.font = "900 11px Segoe UI";
   ctx.fillText(String(totalR), startX + labelW + colW * inningsToShow + 12, y);
   ctx.fillStyle = "#e0d8c8";
   ctx.fillText(String(totalH), startX + labelW + colW * inningsToShow + 32, y);
-  ctx.fillStyle = "#e0d8c8";
-  ctx.fillText("0", startX + labelW + colW * inningsToShow + 52, y);
+  ctx.fillStyle = totalE > 0 ? "#ff8866" : "#e0d8c8";
+  ctx.fillText(String(totalE), startX + labelW + colW * inningsToShow + 52, y);
 }
 
 function drawBatting() {
@@ -3161,8 +3182,20 @@ function applyHitResult(result) {
   }
   if (result === "땅볼아웃" || result === "플라이아웃") {
     const battedBall = startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
+    // Fielding error: ~3.5% on grounders, ~1.5% on fly balls — runner reaches safely
+    const errorChance = result === "땅볼아웃" ? 0.035 : 0.015;
+    if (Math.random() < errorChance) {
+      animateRunner(runner, "home", "first", true);
+      // advance existing runners one base (error treated like a single)
+      const errPlay = advanceRunners(1, runner, battedBall, "1루타");
+      recordError(defenseTeamName());
+      recordBattingOutcome("실책출루", errPlay.runs);
+      recordRuns(errPlay.runs);
+      finishPlateAppearance(`수비 실책 — ${label.replace("아웃", "타구")} 출루${errPlay.runs ? " " + errPlay.runs + "득점" : ""}!`);
+      return;
+    }
     if (result === "땅볼아웃") {
-      animateRunner(runner, "home", "first");
+      animateRunner(runner, "home", "first", true);
       queueOutThrow(battedBall, "first", 0.12);
     }
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && Math.random() < 0.35) {
@@ -3182,7 +3215,7 @@ function applyHitResult(result) {
   if (result === "병살타") {
     const battedBall = startHitAnimation("병살타", 140, "#e6d0a5");
     if (game.bases.first) animateRunner(game.bases.first, "first", "second");
-    animateRunner(runner, "home", "first");
+    animateRunner(runner, "home", "first", true);
     queueOutThrow(battedBall, "second", 0.08);
     if (game.bases.first) game.bases.first = null;
     recordBattingOutcome("병살타", 0);
@@ -3208,7 +3241,7 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
       }
       game.bases[key] = null;
     }
-    animateRunner(batterRunner, "home", "home");
+    animateRunner(batterRunner, "home", "home", true);
     scoreRun(runs);
     return { runs, outs: 0, outBaseLabel: "" };
   }
@@ -3216,12 +3249,21 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
   const plans = buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result);
   const outPlan = chooseThrowOutPlan(plans, battedBall, result);
   if (outPlan) {
-    outPlan.out = true;
-    if (outPlan.throwInfo) {
-      game.throwBall = {
-        ...outPlan.throwInfo,
-        timer: 0,
-      };
+    // ~6% throwing-error chance: throw goes wild, runner safe, ball still flies
+    if (Math.random() < 0.06) {
+      recordError(defenseTeamName());
+      // mark throw but don't tag out
+      if (outPlan.throwInfo) {
+        game.throwBall = { ...outPlan.throwInfo, timer: 0, error: true };
+      }
+    } else {
+      outPlan.out = true;
+      if (outPlan.throwInfo) {
+        game.throwBall = {
+          ...outPlan.throwInfo,
+          timer: 0,
+        };
+      }
     }
   }
 
@@ -3229,7 +3271,7 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
   let runs = 0;
   let outs = 0;
   for (const plan of plans) {
-    animateRunner(plan.runner, plan.fromBase, plan.toBase);
+    animateRunner(plan.runner, plan.fromBase, plan.toBase, plan.isBatter);
     if (plan.out && game.outs + outs < 3) {
       outs += 1;
       continue;
@@ -3300,10 +3342,12 @@ function shouldTryExtraBase(runner, targetBase, battedBall, result) {
   const target = battedBall?.end || FIELD.second;
   const deepBall = target.y < 235 || Math.abs(target.x - FIELD.plate.x) > 250;
   const cleanGap = result === "2루타" || target.y < 210;
+  // 2nd→home on a single: much more permissive when the ball is hit to the OF
+  // (real baseball — runner from 2nd usually scores on a clean single)
   const chance =
     targetBase === "home"
-      ? clamp(0.16 + speed / 260 + (deepBall ? 0.18 : 0) + (cleanGap ? 0.16 : 0), 0.12, 0.82)
-      : clamp(0.18 + speed / 300 + (deepBall ? 0.14 : 0), 0.1, 0.7);
+      ? clamp(0.46 + speed / 200 + (deepBall ? 0.20 : 0) + (cleanGap ? 0.18 : 0), 0.32, 0.96)
+      : clamp(0.22 + speed / 240 + (deepBall ? 0.16 : 0), 0.15, 0.78);
   return Math.random() < chance;
 }
 
@@ -3314,8 +3358,10 @@ function chooseThrowOutPlan(plans, battedBall, result) {
     .map((plan) => {
       const basePoint = getRunnerBasePoint(plan.toBase);
       const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
-      const throwSpeed = defense.fielder?.label === "LF" || defense.fielder?.label === "CF" || defense.fielder?.label === "RF" ? 400 : 520;
-      const throwDuration = Math.max(0.38, throwDistance / throwSpeed + 0.13 + Math.random() * 0.10);
+      const isOFThrow = ["LF", "CF", "RF"].includes(defense.fielder?.label);
+      // Outfield throws are slower especially long ones to home
+      const baseSpeed = isOFThrow ? 340 : 500;
+      const throwDuration = Math.max(0.42, throwDistance / baseSpeed + 0.20 + Math.random() * 0.14);
       const throwArrival = defense.fieldTime + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
@@ -3333,9 +3379,12 @@ function chooseThrowOutPlan(plans, battedBall, result) {
     })
     .filter(({ plan, beatBy }) => {
       if (plan.isBatter) return false;
-      if (plan.toNo >= 4) return beatBy > 0.12;
+      // Runner only out when throw clearly beats them (favor runner on close plays).
+      // home plate: require throw to win by ≥ 0.4s (real-life "throw 2 steps ahead")
+      // other bases: ≥ 0.32s
+      if (plan.toNo >= 4) return beatBy > 0.40;
       if (plan.toNo - plan.fromNo <= (result === "2루타" ? 2 : 1)) return false;
-      return beatBy > 0.16;
+      return beatBy > 0.32;
     })
     .sort((a, b) => b.value - a.value || b.beatBy - a.beatBy);
   if (!throwCandidates[0]) return null;
@@ -3724,13 +3773,17 @@ function scoreRun(count) {
   else game.aiScore += count;
 }
 
-function animateRunner(runner, fromBase, toBase) {
+function animateRunner(runner, fromBase, toBase, isBatter = false) {
   if (!runner) return;
   const path = buildBasePath(fromBase, toBase);
   const from = path[0] || getRunnerBasePoint(fromBase);
   const to = path[path.length - 1] || getRunnerBasePoint(toBase);
   const speed = clamp(runner.speed || 60, 35, 99);
   const dist = pathDistance(path);
+  // Match the math used in runnerTravelTime so animation and out-judgment agree.
+  const runnerSpeed = 108 + speed * 1.15;
+  const turns = Math.max(0, path.length - 2);
+  const duration = dist / runnerSpeed + turns * 0.18 + (isBatter ? 0.18 : 0.04);
   game.runnerAnimations.push({
     runner,
     from,
@@ -3740,7 +3793,7 @@ function animateRunner(runner, fromBase, toBase) {
     fromBase,
     toBase,
     t: 0,
-    duration: clamp(dist / (108 + speed * 1.15), 0.85, 3.2),
+    duration: Math.max(0.6, duration),
   });
 }
 
