@@ -1333,6 +1333,7 @@ function update(deltaTime) {
   updateThrowBall(deltaTime);
   updateFielders(deltaTime);
   updateRunnerAnimations(deltaTime);
+  tickPendingTagPlay(deltaTime);
 }
 
 function updateIntro() {}
@@ -1463,7 +1464,9 @@ function updateHitBall(deltaTime) {
   // Phase 3: pending in-play balls get their result decided by what actually
   // happens during the flight (catch by fielder vs. drop in).
   if (game.hitBall.pendingResolve) {
-    checkInFlightCatch();
+    // Only fire catch detection close to the landing window — earlier
+    // checks let fielders coincidentally graze the ball mid-arc.
+    if (game.hitBall.t > 0.80) checkInFlightCatch();
     if (game.hitBall && game.hitBall.t >= 1 && game.hitBall.pendingResolve) {
       resolvePendingPlay({ caughtInFlight: false });
     }
@@ -2960,18 +2963,21 @@ function checkInFlightCatch() {
   // Need fielder dispatched first
   if (!game.hitBall.fielderSent) return;
   const t = game.hitBall.t;
-  if (t < 0.45 || t > 0.97) return;
+  if (t < 0.85 || t > 0.99) return;
+  const physics = game.hitBall.physics || {};
+  if (physics.isGroundBall) return; // grounders settle then get picked up
   const pos = quadraticPoint(game.hitBall.start, game.hitBall.peak, game.hitBall.end, t);
-  // Use the active fielder(s) — those routed to the ball
   const active = game.fielders.filter((f) => f.active);
   if (active.length === 0) return;
   const closest = nearestFielder(active, pos);
   if (!closest) return;
+  // For a clean catch, the fielder must have actually arrived at their target
+  // (i.e. they've finished sprinting, glove up, waiting under the ball).
+  // If they're still mid-sprint when the ball drops in, no catch.
+  const fielderArrived = Math.hypot(closest.x - closest.targetX, closest.y - closest.targetY) < 4;
+  if (!fielderArrived) return;
   const dist = Math.hypot(closest.x - pos.x, closest.y - pos.y);
-  // Glove range scales with how "catchable" the ball type is
-  const physics = game.hitBall.physics || {};
-  if (physics.isGroundBall) return; // grounders settle then get picked up
-  const range = physics.isPopup ? 30 : physics.isFlyBall ? 26 : 22;
+  const range = physics.isPopup ? 24 : physics.isFlyBall ? 20 : 14;
   if (dist < range) {
     game.hitBall.caughtInFlight = true;
     closest.hasBall = true;
@@ -3089,8 +3095,8 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
 
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
-  const isLineDrive = launchDeg > 6 && launchDeg <= 22 && exitVel > 70;
-  const isGroundBall = launchDeg <= 6;
+  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
+  const isGroundBall = launchDeg <= 2;
 
   return {
     totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
@@ -3397,8 +3403,10 @@ function resolvePitchingResult(aiSwung) {
 // + timingDiff and run the same physics + landing+fielder outcome logic.
 function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, timingDiff, fatigue }) {
   const qualityRaw = clamp((contactScore - 30) / 80, 0, 1);
-  // Synthesize how close to sweet spot the AI's bat would have been
-  const along = clamp(0.5 + qualityRaw * 0.28 + (Math.random() - 0.5) * 0.20, 0.18, 0.95);
+  // Synthesize how close to sweet spot the AI's bat would have been.
+  // Center near sweet spot with moderate spread for a realistic
+  // ground/liner/fly distribution.
+  const along = clamp(0.46 + qualityRaw * 0.30 + (Math.random() - 0.5) * 0.28, 0.18, 0.95);
   const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
   const totalQuality = qualityRaw * 0.55 + sweetSpot * 0.45;
 
@@ -3440,8 +3448,8 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const isHR = fair && launchDeg > 18 && carry > 380 && landingY < 110;
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
-  const isLineDrive = launchDeg > 6 && launchDeg <= 22 && exitVel > 70;
-  const isGroundBall = launchDeg <= 6;
+  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
+  const isGroundBall = launchDeg <= 2;
 
   return {
     totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
@@ -3553,7 +3561,11 @@ function applyHitResult(result, options = {}) {
   const play = advanceRunners(bases, runner, battedBall, result);
   recordRuns(play.runs);
   recordBattingOutcome(result, play.runs);
-  const suffix = play.outs ? ` · ${play.outBaseLabel} 송구 아웃!` : "!";
+  // For contested plays the safe/out is decided later by tickPendingTagPlay,
+  // so the immediate text just signals a throw is incoming.
+  const suffix = play.contested
+    ? ` · ${play.outBaseLabel} 송구 중`
+    : play.outs ? ` · ${play.outBaseLabel} 송구 아웃!` : "!";
   finishPlateAppearance(`${label}${suffix}`);
 }
 
@@ -3574,46 +3586,100 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
 
   const plans = buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result);
   const outPlan = chooseThrowOutPlan(plans, battedBall, result);
+  const throwingError = outPlan && Math.random() < 0.06;
   if (outPlan) {
-    // ~6% throwing-error chance: throw goes wild, runner safe, ball still flies
-    if (Math.random() < 0.06) {
+    if (throwingError) {
       recordError(defenseTeamName());
-      // mark throw but don't tag out
       if (outPlan.throwInfo) {
         game.throwBall = { ...outPlan.throwInfo, timer: 0, error: true };
       }
-    } else {
-      outPlan.out = true;
-      if (outPlan.throwInfo) {
-        game.throwBall = {
-          ...outPlan.throwInfo,
-          timer: 0,
-        };
-      }
+    } else if (outPlan.throwInfo) {
+      game.throwBall = { ...outPlan.throwInfo, timer: 0 };
     }
   }
 
+  // Phase 4: defer the contested play's decision until the throw/runner
+  // animations actually arrive at the contested base. Non-contested
+  // advancements (including same-play runners not at the contested bag) are
+  // applied right now so the game state stays coherent.
   const next = { first: null, second: null, third: null };
   let runs = 0;
-  let outs = 0;
+  const contested = outPlan && !throwingError ? outPlan : null;
   for (const plan of plans) {
-    animateRunner(plan.runner, plan.fromBase, plan.toBase, plan.isBatter);
-    if (plan.out && game.outs + outs < 3) {
-      outs += 1;
-      continue;
-    }
+    animateRunner(plan.runner, plan.fromBase, plan.toBase, plan.isBatter, plan.runnerTime);
+    if (plan === contested) continue; // defer placement / out decision
     if (plan.toNo >= 4) runs += 1;
     else next[plan.toBase] = plan.runner;
   }
-
   game.bases = next;
   scoreRun(runs);
-  if (outs) game.outs = clamp(game.outs + outs, 0, 3);
+
+  if (contested) {
+    // Register pending tag play; runner is currently in flight on the basepaths
+    // and the throw is mid-air. Whichever arrives first wins.
+    game.pendingTagPlay = {
+      runner: contested.runner,
+      toBase: contested.toBase,
+      toNo: contested.toNo,
+      runnerArrivalAt: contested.runnerTime,
+      throwArrivalAt: contested.throwInfo ? contested.throwInfo.delay + contested.throwInfo.duration : Infinity,
+      elapsed: 0,
+      resolved: false,
+      runs: 0,
+    };
+  }
+
   return {
     runs,
-    outs,
-    outBaseLabel: outPlan ? baseDisplayName(outPlan.toBase) : "",
+    outs: 0, // contested out (if any) is applied later by tickPendingTagPlay
+    outBaseLabel: contested ? baseDisplayName(contested.toBase) : "",
+    contested: Boolean(contested),
   };
+}
+
+// Tick the deferred tag play each frame. Decide safe/out when either the
+// throw or the runner actually arrives at the contested base.
+function tickPendingTagPlay(deltaTime) {
+  const play = game.pendingTagPlay;
+  if (!play || play.resolved) return;
+  play.elapsed += deltaTime;
+  const throwArrived = play.elapsed >= play.throwArrivalAt;
+  const runnerArrived = play.elapsed >= play.runnerArrivalAt;
+  if (!throwArrived && !runnerArrived) return;
+  play.resolved = true;
+  // If the throw arrived clearly before the runner, runner is out.
+  // Real-life baseball gives ties to the runner.
+  if (throwArrived && (!runnerArrived || play.runnerArrivalAt - play.throwArrivalAt > 0.05)) {
+    applyTagOut(play);
+  } else {
+    applyTagSafe(play);
+  }
+}
+
+function applyTagOut(play) {
+  game.outs = clamp(game.outs + 1, 0, 3);
+  const pitcherObj = battingPitcher();
+  if (pitcherObj?.name) {
+    const ps = ensurePitcherStat(pitcherObj.name, defenseTeamName());
+    ps.outs = (ps.outs || 0) + 1;
+  }
+  game.pendingTagPlay = null;
+  // If this tag completes the half-inning, switch right away. Otherwise the
+  // current showResult timeout will handle the natural transition.
+  if (game.outs >= 3 && game.state === "result") {
+    switchHalfInning();
+  }
+}
+
+function applyTagSafe(play) {
+  // Runner reaches the base safely.
+  if (play.toNo >= 4) {
+    scoreRun(1);
+    recordRuns(1);
+  } else if (!game.bases[play.toBase]) {
+    game.bases[play.toBase] = play.runner;
+  }
+  game.pendingTagPlay = null;
 }
 
 function buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result) {
@@ -4099,7 +4165,7 @@ function scoreRun(count) {
   else game.aiScore += count;
 }
 
-function animateRunner(runner, fromBase, toBase, isBatter = false) {
+function animateRunner(runner, fromBase, toBase, isBatter = false, forceDuration = null) {
   if (!runner) return;
   const path = buildBasePath(fromBase, toBase);
   const from = path[0] || getRunnerBasePoint(fromBase);
@@ -4107,9 +4173,12 @@ function animateRunner(runner, fromBase, toBase, isBatter = false) {
   const speed = clamp(runner.speed || 60, 35, 99);
   const dist = pathDistance(path);
   // Match the math used in runnerTravelTime so animation and out-judgment agree.
+  // When the caller passes forceDuration (e.g. the same runnerTime sample used
+  // in chooseThrowOutPlan), use that directly so visual = math.
   const runnerSpeed = 108 + speed * 1.15;
   const turns = Math.max(0, path.length - 2);
-  const duration = dist / runnerSpeed + turns * 0.18 + (isBatter ? 0.18 : 0.04);
+  const computed = dist / runnerSpeed + turns * 0.18 + (isBatter ? 0.18 : 0.04);
+  const duration = forceDuration ?? computed;
   game.runnerAnimations.push({
     runner,
     from,
