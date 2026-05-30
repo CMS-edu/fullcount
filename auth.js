@@ -28,6 +28,14 @@ const onlineState = {
 };
 
 const realtimeListeners = new Set();
+const leagueListeners = new Set();
+
+const onlineLeagueState = {
+  code: null,
+  league: null,
+  myClientId: null,
+  username: "Player",
+};
 
 window.fullcountAuth = {
   get user() {
@@ -62,6 +70,11 @@ window.fullcountRealtime = {
     realtimeListeners.add(listener);
     return () => realtimeListeners.delete(listener);
   },
+  sendLeagueResult(payload) {
+    if (!onlineLeagueState.code) return false;
+    sendLeagueMessage({ type: "league-record-match", ...payload });
+    return true;
+  },
   room() {
     return {
       connected: onlineState.connected,
@@ -89,6 +102,16 @@ async function initAppShell() {
     if (authState.user) await loadRecentMatches();
   } catch {
     authState.user = null;
+  }
+  // Auto-join online league if URL has leagueCode
+  const lc = new URLSearchParams(location.search).get("leagueCode");
+  if (lc) {
+    authState.view = "league";
+    onlineLeagueState.username = authState.user?.username || "Player";
+    setTimeout(() => {
+      connectRealtime();
+      sendLeagueMessage({ type: "league-join", code: lc, username: onlineLeagueState.username });
+    }, 100);
   }
   renderApp();
 }
@@ -257,6 +280,13 @@ function handleRealtime(data) {
   if (data.type === "game-event" || data.type === "game-input" || data.type === "game-state") {
     realtimeListeners.forEach((listener) => listener(data));
     return;
+  }
+  if (typeof data.type === "string" && data.type.startsWith("league-")) {
+    handleLeagueRealtime(data);
+    return;
+  }
+  if (data.type === "connected" && data.clientId) {
+    onlineLeagueState.myClientId = data.clientId;
   }
   if (data.type === "connected") addOnlineLog("소켓 연결 확인.");
   if (data.type === "room-joined") {
@@ -644,6 +674,30 @@ function ipFormat(outs) {
   return rem === 0 ? `${whole}` : `${whole} ${rem}/3`;
 }
 
+// ─── Online league realtime ─────────────────────────────────────
+function handleLeagueRealtime(data) {
+  if (data.type === "league-joined") {
+    onlineLeagueState.code = data.code;
+    if (authState.view === "league") renderApp();
+  }
+  if (data.type === "league-state") {
+    onlineLeagueState.league = data.league;
+    onlineLeagueState.code = data.league.code;
+    leagueListeners.forEach((fn) => fn(data.league));
+    if (authState.view === "league") renderApp();
+  }
+  if (data.type === "league-error") {
+    alert(data.message || "리그 오류");
+  }
+}
+
+function sendLeagueMessage(payload) {
+  const send = () => onlineState.socket?.send(JSON.stringify(payload));
+  if (!onlineState.socket || onlineState.socket.readyState === WebSocket.CLOSED) connectRealtime();
+  if (onlineState.socket?.readyState === WebSocket.OPEN) send();
+  else onlineState.socket?.addEventListener("open", send, { once: true });
+}
+
 // ─── League system ──────────────────────────────────────────────
 function loadLeagues() {
   try { return JSON.parse(localStorage.getItem("fullcount:leagues")) || []; }
@@ -720,6 +774,7 @@ function updateLeague(id, mutator) {
 }
 
 function leagueTemplate() {
+  if (onlineLeagueState.league) return renderOnlineLeagueDetail(onlineLeagueState.league);
   const leagues = loadLeagues();
   const activeId = activeLeagueId();
   const active = activeId ? leagues.find((l) => l.id === activeId) : null;
@@ -734,6 +789,7 @@ function renderLeagueList(leagues) {
       <label class="lg-team-pick"><input type="checkbox" name="leagueTeams" value="${escapeHtml(t.name)}" data-lg-team-toggle/> ${escapeHtml(t.name)}</label>
       <label class="lg-player-pick"><input type="checkbox" name="leaguePlayerTeams" value="${escapeHtml(t.name)}" data-lg-player-toggle/> 👤 직접 조작</label>
     </div>`).join("");
+  const onlineTeamCheckboxes = teams.map((t) => `<label class="lg-team-pick"><input type="checkbox" name="onlineLeagueTeams" value="${escapeHtml(t.name)}"/> ${escapeHtml(t.name)}</label>`).join("");
   const list = leagues.length ? leagues.map((l) => {
     const played = l.schedule.filter((m) => m.result).length;
     const players = (l.playerTeams || []).length;
@@ -752,9 +808,37 @@ function renderLeagueList(leagues) {
     <div class="auth-card">
       <p class="eyebrow">LEAGUE</p>
       <h2>리그</h2>
+      <section class="lg-online-section">
+        <h3>온라인 리그 (다른 사람 초대)</h3>
+        <form id="onlineLeagueJoinForm" class="lg-online-join">
+          <label>닉네임<input name="username" value="${escapeHtml(authState.user?.username || "Player")}" required /></label>
+          <label>리그 코드<input name="code" placeholder="6자리 코드 (예: 1A2B3C)" /></label>
+          <button type="submit">코드로 입장</button>
+        </form>
+        <form id="onlineLeagueCreateForm" class="lg-online-create">
+          <h4>새 온라인 리그 만들기</h4>
+          <label>리그 이름<input name="leagueName" placeholder="예: 친구 리그" required /></label>
+          <label>이닝 수
+            <select name="leagueInnings">
+              <option value="1">1이닝</option>
+              <option value="3" selected>3이닝</option>
+              <option value="5">5이닝</option>
+              <option value="7">7이닝</option>
+              <option value="9">9이닝</option>
+            </select>
+          </label>
+          <fieldset class="lg-team-pickset">
+            <legend>참가 팀 선택 (2팀 이상). 입장 후 각자 팀을 클레임합니다.</legend>
+            ${onlineTeamCheckboxes}
+          </fieldset>
+          <button class="primary" type="submit">온라인 리그 만들기 + 코드 발급</button>
+        </form>
+      </section>
+      <hr style="border-color:#444;margin:18px 0" />
+      <h3>로컬 리그</h3>
       <ol class="lg-list">${list}</ol>
       <form id="leagueCreateForm" class="lg-create">
-        <h3>새 리그 만들기</h3>
+        <h3>새 로컬 리그 만들기</h3>
         <label>리그 이름<input name="leagueName" placeholder="예: 2026 풀카운트 리그" required /></label>
         <label>이닝 수
           <select name="leagueInnings">
@@ -769,9 +853,111 @@ function renderLeagueList(leagues) {
           <legend>참가 팀 + 직접 조작할 팀(👤) 선택 (2팀 이상)</legend>
           ${teamCheckboxes}
         </fieldset>
-        <button class="primary" type="submit">리그 생성 + 라운드로빈 스케줄 자동 생성</button>
+        <button class="primary" type="submit">로컬 리그 생성 + 라운드로빈 스케줄 자동 생성</button>
       </form>
     </div>`;
+}
+
+function renderOnlineLeagueDetail(league) {
+  const myId = onlineLeagueState.myClientId;
+  const myClaim = Object.entries(league.claims || {}).find(([, c]) => c.clientId === myId);
+  const myTeam = myClaim?.[0];
+  const tab = authState.leagueTab || "claims";
+  const tabBtn = (key, label) => `<button class="rec-tab${tab === key ? " active" : ""}" data-lg-tab="${key}">${label}</button>`;
+  const inviteLink = `${location.origin}${location.pathname}?leagueCode=${encodeURIComponent(league.code)}`;
+
+  let body = "";
+  if (tab === "claims") body = renderOnlineLeagueClaims(league, myId);
+  else if (tab === "standings") body = renderLeagueStandings(league);
+  else if (tab === "schedule") body = renderOnlineLeagueSchedule(league, myTeam);
+  else if (tab === "batting") body = renderLeagueBatters(league);
+  else if (tab === "pitching") body = renderLeaguePitchers(league);
+  else if (tab === "awards") body = renderLeagueAwards(league);
+
+  return `
+    <div class="auth-card records-card">
+      <div class="lg-header">
+        <p class="eyebrow">ONLINE LEAGUE · 코드 ${escapeHtml(league.code)}</p>
+        <h2>${escapeHtml(league.name)}</h2>
+        <p class="muted">${league.teams.length}팀 · ${league.innings}이닝 · 접속 ${(league.members || []).length}명 ${myTeam ? "· 내 팀: " + escapeHtml(myTeam) : "· 팀 미클레임"}</p>
+        <div class="invite-box"><strong>초대 링크</strong><span>${escapeHtml(inviteLink)}</span> <button data-lg-action="copyOnlineInvite">복사</button></div>
+      </div>
+      <div class="rec-tabs">
+        ${tabBtn("claims", "참가자/팀")}
+        ${tabBtn("standings", "순위표")}
+        ${tabBtn("schedule", "일정·결과")}
+        ${tabBtn("batting", "타격")}
+        ${tabBtn("pitching", "투수")}
+        ${tabBtn("awards", "시상")}
+        <button class="rec-tab" data-lg-action="leaveOnline">← 나가기</button>
+      </div>
+      <div class="rec-body">${body}</div>
+    </div>`;
+}
+
+function renderOnlineLeagueClaims(league, myId) {
+  const members = league.members || [];
+  const memberHtml = members.length ? members.map((m) => {
+    const claimed = Object.entries(league.claims || {}).find(([, c]) => c.clientId === m.id)?.[0];
+    const isMe = m.id === myId;
+    return `<li><strong>${escapeHtml(m.username)}${isMe ? " (나)" : ""}</strong> <span class="muted">${claimed ? "클레임: " + escapeHtml(claimed) : "팀 없음"}</span></li>`;
+  }).join("") : "<li class='muted'>아직 접속자 없음</li>";
+
+  const teamHtml = league.teams.map((t) => {
+    const claim = league.claims?.[t];
+    const isMine = claim?.clientId === myId;
+    let btn;
+    if (!claim) btn = `<button data-lg-action="onlineClaim" data-team="${escapeHtml(t)}">이 팀 클레임</button>`;
+    else if (isMine) btn = `<button class="danger" data-lg-action="onlineUnclaim">내 클레임 해제</button>`;
+    else btn = `<span class="muted">${escapeHtml(claim.username)} 보유</span>`;
+    return `<li class="lg-list-row">
+      <div><strong>${escapeHtml(t)}</strong><span class="muted">${claim ? "👤 " + escapeHtml(claim.username) : "AI"}</span></div>
+      <div>${btn}</div>
+    </li>`;
+  }).join("");
+
+  return `
+    <h3 style="padding:12px;margin:0">참가자</h3>
+    <ul class="match-list" style="padding:0 12px">${memberHtml}</ul>
+    <h3 style="padding:12px;margin:0">팀 목록 (미클레임 = AI)</h3>
+    <ol class="lg-list">${teamHtml}</ol>`;
+}
+
+function renderOnlineLeagueSchedule(league, myTeam) {
+  const rows = league.schedule.map((m, i) => {
+    const homeClaim = league.claims?.[m.home];
+    const awayClaim = league.claims?.[m.away];
+    const isPlayed = !!m.result;
+    const homeBadge = homeClaim ? ` 👤${escapeHtml(homeClaim.username)}` : "";
+    const awayBadge = awayClaim ? ` 👤${escapeHtml(awayClaim.username)}` : "";
+    const isMyMatch = myTeam && (m.home === myTeam || m.away === myTeam);
+    let actionBtn;
+    if (isPlayed) {
+      const r = m.result;
+      actionBtn = `<span class="muted">${r.home} ${r.homeScore} - ${r.awayScore} ${r.away}</span>`;
+    } else if (isMyMatch) {
+      actionBtn = `<button class="primary" data-lg-action="onlinePlay" data-lg-match="${i}">경기 시작</button>`;
+    } else if (!homeClaim && !awayClaim) {
+      actionBtn = `<button data-lg-action="onlineSim" data-lg-match="${i}">AI 시뮬</button>`;
+    } else {
+      actionBtn = `<span class="muted">상대 플레이 대기</span>`;
+    }
+    return `<tr>
+      <td>${i + 1}</td>
+      <td class="rec-team">${escapeHtml(m.home)}${homeBadge}</td>
+      <td class="muted">vs</td>
+      <td class="rec-team">${escapeHtml(m.away)}${awayBadge}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="lg-sched-toolbar">
+      <button data-lg-action="onlineSimAll">미클레임 AI 매치 일괄 시뮬</button>
+    </div>
+    <table class="rec-table">
+      <thead><tr><th>#</th><th>홈</th><th></th><th>원정</th><th>결과 / 액션</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 function renderLeagueDetail(league) {
@@ -1105,6 +1291,41 @@ function clampLeague(v, min = 0.02, max = 0.95) {
 }
 
 function bindLeague() {
+  // Online league create
+  document.getElementById("onlineLeagueCreateForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const teams = data.getAll("onlineLeagueTeams").filter(Boolean);
+    if (teams.length < 2) {
+      alert("팀을 2개 이상 선택하세요.");
+      return;
+    }
+    onlineLeagueState.username = authState.user?.username || "Player";
+    connectRealtime();
+    sendLeagueMessage({
+      type: "league-create",
+      name: data.get("leagueName"),
+      innings: data.get("leagueInnings"),
+      teams,
+      username: onlineLeagueState.username,
+    });
+  });
+  // Online league join by code
+  document.getElementById("onlineLeagueJoinForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const code = String(data.get("code") || "").trim().toUpperCase();
+    const username = String(data.get("username") || "Player").trim();
+    if (!code) {
+      alert("리그 코드를 입력하세요.");
+      return;
+    }
+    onlineLeagueState.username = username;
+    connectRealtime();
+    sendLeagueMessage({ type: "league-join", code, username });
+  });
   document.getElementById("leagueCreateForm")?.addEventListener("submit", (e) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -1159,6 +1380,64 @@ function bindLeague() {
 function handleLeagueAction(btn, e) {
   const action = btn.dataset.lgAction;
   const id = btn.dataset.lgId;
+  // Online league actions
+  if (action === "leaveOnline") {
+    onlineLeagueState.code = null;
+    onlineLeagueState.league = null;
+    renderApp();
+    return;
+  }
+  if (action === "onlineClaim") {
+    const team = btn.dataset.team;
+    sendLeagueMessage({ type: "league-claim", team });
+    return;
+  }
+  if (action === "onlineUnclaim") {
+    sendLeagueMessage({ type: "league-unclaim" });
+    return;
+  }
+  if (action === "copyOnlineInvite") {
+    const inviteLink = `${location.origin}${location.pathname}?leagueCode=${encodeURIComponent(onlineLeagueState.code)}`;
+    navigator.clipboard?.writeText(inviteLink).then(() => alert("초대 링크 복사됨"));
+    return;
+  }
+  if (action === "onlinePlay") {
+    const matchIdx = Number(btn.dataset.lgMatch);
+    const league = onlineLeagueState.league;
+    if (!league) return;
+    const m = league.schedule[matchIdx];
+    const myId = onlineLeagueState.myClientId;
+    const myTeam = Object.entries(league.claims || {}).find(([, c]) => c.clientId === myId)?.[0];
+    if (!myTeam || (m.home !== myTeam && m.away !== myTeam)) {
+      alert("내 팀이 포함된 매치만 시작할 수 있습니다.");
+      return;
+    }
+    // For now: play locally vs AI opponent (other claimer plays separately on their end).
+    window.fullcountGame?.startLeagueMatch?.({ leagueId: "online:" + league.code, matchIdx, home: m.home, away: m.away, innings: league.innings, userTeam: myTeam, online: true });
+    authState.view = "game";
+    renderApp();
+    return;
+  }
+  if (action === "onlineSim") {
+    const matchIdx = Number(btn.dataset.lgMatch);
+    const league = onlineLeagueState.league;
+    if (!league) return;
+    const m = league.schedule[matchIdx];
+    const sim = simulateLeagueMatch(league, m.home, m.away);
+    sendLeagueMessage({ type: "league-record-match", matchIdx, homeScore: sim.homeScore, awayScore: sim.awayScore });
+    return;
+  }
+  if (action === "onlineSimAll") {
+    const league = onlineLeagueState.league;
+    if (!league) return;
+    league.schedule.forEach((m, i) => {
+      if (m.result) return;
+      if (league.claims?.[m.home] || league.claims?.[m.away]) return;
+      const sim = simulateLeagueMatch(league, m.home, m.away);
+      sendLeagueMessage({ type: "league-record-match", matchIdx: i, homeScore: sim.homeScore, awayScore: sim.awayScore });
+    });
+    return;
+  }
   if (action === "open") {
     setActiveLeagueId(id);
     authState.leagueTab = "standings";

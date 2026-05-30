@@ -558,6 +558,55 @@ button:disabled {
   font-size: 12px;
 }
 
+.lg-online-section {
+  padding: 12px;
+  border: 3px solid #f4c24d;
+  background: #14110a;
+  display: grid;
+  gap: 10px;
+}
+
+.lg-online-section h3 {
+  margin: 0;
+  color: #f4c24d;
+}
+
+.lg-online-section h4 {
+  margin: 8px 0 4px;
+  color: #f4c24d;
+}
+
+.lg-online-join,
+.lg-online-create {
+  display: grid;
+  gap: 10px;
+  border-top: 1px dashed #444;
+  padding-top: 8px;
+}
+
+.invite-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 2px solid #050505;
+  background: #fff4df;
+  color: #141414;
+  font-weight: 800;
+  word-break: break-all;
+}
+
+.invite-box strong {
+  color: #d71920;
+}
+
+.invite-box span {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+}
+
 .lg-header {
   display: grid;
   gap: 4px;

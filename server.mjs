@@ -33,6 +33,7 @@ const memory = {
 };
 
 const rooms = new Map();
+const leagues = new Map();
 
 let pool = null;
 let dbReady = false;
@@ -454,8 +455,14 @@ function handleWebSocketUpgrade(req, socket) {
   socket.on("data", (buffer) => {
     for (const message of decodeWebSocketMessages(buffer)) handleRealtimeMessage(client, message);
   });
-  socket.on("close", () => leaveRealtimeRoom(client));
-  socket.on("error", () => leaveRealtimeRoom(client));
+  socket.on("close", () => {
+    leaveRealtimeRoom(client);
+    leaveLeagueRoom(client);
+  });
+  socket.on("error", () => {
+    leaveRealtimeRoom(client);
+    leaveLeagueRoom(client);
+  });
   wsSend(client, { type: "connected", clientId: client.id });
 }
 
@@ -465,6 +472,10 @@ function handleRealtimeMessage(client, message) {
     data = JSON.parse(message);
   } catch {
     wsSend(client, { type: "error", message: "잘못된 메시지입니다." });
+    return;
+  }
+  if (typeof data.type === "string" && data.type.startsWith("league-")) {
+    handleLeagueMessage(client, data);
     return;
   }
   if (data.type === "create-room") {
@@ -508,6 +519,173 @@ function handleRealtimeMessage(client, message) {
   if (["game-input", "game-event", "game-state", "chat"].includes(data.type)) {
     wsBroadcast(room, { ...data, from: client.seat, roomId: room.id }, client);
   }
+}
+
+function handleLeagueMessage(client, data) {
+  if (data.type === "league-create") {
+    leaveLeagueRoom(client);
+    const code = createLeagueCode();
+    const teams = Array.isArray(data.teams) ? data.teams.map(String).slice(0, 16) : [];
+    if (teams.length < 2) return wsSend(client, { type: "league-error", message: "팀은 2개 이상 필요합니다." });
+    const innings = [1, 3, 5, 7, 9].includes(Number(data.innings)) ? Number(data.innings) : 3;
+    const league = {
+      code,
+      name: String(data.name || "온라인 리그").slice(0, 40),
+      teams,
+      innings,
+      schedule: buildSimpleRoundRobin(teams),
+      standings: Object.fromEntries(teams.map((t) => [t, { W: 0, L: 0, T: 0, RS: 0, RA: 0, G: 0 }])),
+      batters: {},
+      pitchers: {},
+      claims: {},
+      clients: new Set(),
+      hostId: client.id,
+      createdAt: Date.now(),
+    };
+    leagues.set(code, league);
+    joinLeagueRoom(client, league, data);
+    return;
+  }
+  if (data.type === "league-join") {
+    const code = String(data.code || "").trim().toUpperCase();
+    const league = leagues.get(code);
+    if (!league) return wsSend(client, { type: "league-error", message: "리그 코드를 찾을 수 없습니다." });
+    leaveLeagueRoom(client);
+    joinLeagueRoom(client, league, data);
+    return;
+  }
+  if (!client.leagueCode) return wsSend(client, { type: "league-error", message: "리그에 먼저 입장하세요." });
+  const league = leagues.get(client.leagueCode);
+  if (!league) return;
+  if (data.type === "league-claim") {
+    const team = String(data.team || "");
+    if (!league.teams.includes(team)) return wsSend(client, { type: "league-error", message: "리그에 없는 팀입니다." });
+    if (league.claims[team] && league.claims[team].clientId !== client.id) {
+      return wsSend(client, { type: "league-error", message: "다른 사용자가 이미 클레임한 팀입니다." });
+    }
+    // unclaim any previously claimed team by this client
+    for (const t of Object.keys(league.claims)) {
+      if (league.claims[t].clientId === client.id) delete league.claims[t];
+    }
+    league.claims[team] = { clientId: client.id, username: client.leagueUsername || "Player" };
+    broadcastLeagueState(league);
+    return;
+  }
+  if (data.type === "league-unclaim") {
+    for (const t of Object.keys(league.claims)) {
+      if (league.claims[t].clientId === client.id) delete league.claims[t];
+    }
+    broadcastLeagueState(league);
+    return;
+  }
+  if (data.type === "league-record-match") {
+    const idx = Number(data.matchIdx);
+    const m = league.schedule[idx];
+    if (!m) return;
+    const homeScore = clampInt(data.homeScore, 0, 99);
+    const awayScore = clampInt(data.awayScore, 0, 99);
+    m.result = { home: m.home, away: m.away, homeScore, awayScore, date: new Date().toISOString() };
+    const hs = league.standings[m.home];
+    const as = league.standings[m.away];
+    if (hs && as) {
+      hs.G += 1; as.G += 1;
+      hs.RS += homeScore; hs.RA += awayScore;
+      as.RS += awayScore; as.RA += homeScore;
+      if (homeScore > awayScore) { hs.W += 1; as.L += 1; }
+      else if (homeScore < awayScore) { hs.L += 1; as.W += 1; }
+      else { hs.T += 1; as.T += 1; }
+    }
+    mergePlayerStatsServer(league.batters, data.batters);
+    mergePlayerStatsServer(league.pitchers, data.pitchers);
+    broadcastLeagueState(league);
+    return;
+  }
+}
+
+function mergePlayerStatsServer(target, incoming) {
+  if (!incoming || typeof incoming !== "object") return;
+  for (const [name, m] of Object.entries(incoming)) {
+    if (typeof m !== "object" || !m) continue;
+    const s = target[name] = target[name] || { team: m.team || "" };
+    s.team = m.team || s.team;
+    for (const [k, v] of Object.entries(m)) {
+      if (k === "team") continue;
+      if (typeof v === "number") s[k] = (s[k] || 0) + v;
+    }
+  }
+}
+
+function joinLeagueRoom(client, league, data) {
+  client.leagueCode = league.code;
+  client.leagueUsername = String(data.username || "Player").slice(0, 24);
+  league.clients.add(client);
+  wsSend(client, { type: "league-joined", code: league.code });
+  broadcastLeagueState(league);
+}
+
+function leaveLeagueRoom(client) {
+  if (!client.leagueCode) return;
+  const league = leagues.get(client.leagueCode);
+  if (league) {
+    league.clients.delete(client);
+    // Don't drop claims; keep state for re-join.
+    if (league.clients.size === 0 && Date.now() - league.createdAt > 60 * 60 * 1000) {
+      leagues.delete(league.code);
+    } else {
+      broadcastLeagueState(league);
+    }
+  }
+  client.leagueCode = null;
+}
+
+function broadcastLeagueState(league) {
+  const snapshot = leagueSnapshot(league);
+  for (const c of league.clients) wsSend(c, { type: "league-state", league: snapshot });
+}
+
+function leagueSnapshot(league) {
+  return {
+    code: league.code,
+    name: league.name,
+    teams: league.teams,
+    innings: league.innings,
+    schedule: league.schedule,
+    standings: league.standings,
+    batters: league.batters,
+    pitchers: league.pitchers,
+    claims: league.claims,
+    members: [...league.clients].map((c) => ({ id: c.id, username: c.leagueUsername || "Player" })),
+  };
+}
+
+function buildSimpleRoundRobin(teamNames) {
+  const teams = [...teamNames];
+  if (teams.length < 2) return [];
+  const n = teams.length % 2 === 0 ? teams.length : teams.length + 1;
+  const slots = [...teams];
+  if (slots.length < n) slots.push(null);
+  const rounds = [];
+  const half = n / 2;
+  for (let r = 0; r < n - 1; r++) {
+    const round = [];
+    for (let i = 0; i < half; i++) {
+      const a = slots[i];
+      const b = slots[n - 1 - i];
+      if (a && b) round.push({ home: a, away: b, result: null });
+    }
+    rounds.push(round);
+    const last = slots.pop();
+    slots.splice(1, 0, last);
+  }
+  return rounds.flat();
+}
+
+function createLeagueCode() {
+  let code;
+  do {
+    code = randomBytes(3).toString("hex").toUpperCase();
+  } while (leagues.has(code));
+  return code;
 }
 
 function joinRealtimeRoom(client, room, seat, data) {

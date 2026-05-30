@@ -4969,6 +4969,23 @@ function startLeagueMatch({ leagueId, matchIdx, home, away, innings, userTeam: e
 function recordLeagueMatchResult() {
   const ctx = game.leagueContext;
   if (!ctx) return;
+  // Online league: send to server via WS rather than localStorage
+  if (typeof ctx.leagueId === "string" && ctx.leagueId.startsWith("online:")) {
+    const userTeamName = currentUserTeam().name;
+    const homeScore = ctx.home === userTeamName ? game.userScore : game.aiScore;
+    const awayScore = ctx.home === userTeamName ? game.aiScore : game.userScore;
+    try {
+      window.fullcountRealtime?.sendLeagueResult?.({
+        matchIdx: ctx.matchIdx,
+        homeScore,
+        awayScore,
+        batters: game.matchBatterStats,
+        pitchers: game.matchPitcherStats,
+      });
+    } catch (e) { console.warn("online league result send failed", e); }
+    game.leagueContext = null;
+    return;
+  }
   try {
     const leagues = JSON.parse(localStorage.getItem("fullcount:leagues")) || [];
     const idx = leagues.findIndex((l) => l.id === ctx.leagueId);
