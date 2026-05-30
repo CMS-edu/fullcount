@@ -2977,7 +2977,8 @@ function checkInFlightCatch() {
   const fielderArrived = Math.hypot(closest.x - closest.targetX, closest.y - closest.targetY) < 4;
   if (!fielderArrived) return;
   const dist = Math.hypot(closest.x - pos.x, closest.y - pos.y);
-  const range = physics.isPopup ? 24 : physics.isFlyBall ? 20 : 14;
+  // Generous on popups, stingier on flies/liners so well-struck balls find gaps
+  const range = physics.isPopup ? 24 : physics.isFlyBall ? 16 : 11;
   if (dist < range) {
     game.hitBall.caughtInFlight = true;
     closest.hasBall = true;
@@ -3000,24 +3001,30 @@ function resolvePendingPlay({ caughtInFlight, fielder }) {
     const active = game.fielders.filter((f) => f.active);
     const closest = active.length ? nearestFielder(active, landing) : nearestFielder(game.fielders, landing);
     const fieldDist = closest ? Math.hypot(closest.x - landing.x, closest.y - landing.y) : 200;
-    const reachTime = fieldDist / ((closest?.speed || 170) * 0.78) + 0.18;
+    // Realistic defense imperfection: pickup jitter + throw release variance
+    const reachTime = fieldDist / ((closest?.speed || 170) * 0.78) + 0.22 + Math.random() * 0.18;
     const throwDist = Math.hypot(FIELD.first.x - landing.x, FIELD.first.y - landing.y);
-    const throwTime = throwDist / 500 + 0.18;
+    const throwTime = throwDist / 540 + 0.22 + Math.random() * 0.12;
     const defTotal = reachTime + throwTime;
     const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
-    if (defTotal < batterRunTime - 0.22) {
+    // 10% chance the fielder mishandles a grounder — clean single, no out
+    if (Math.random() < 0.10) {
+      result = "1루타";
+    } else if (defTotal < batterRunTime - 0.40) {
+      // Defense has clear advantage → out
       const hasForce = game.bases.first && game.outs < 2;
-      result = hasForce && Math.random() < 0.24 ? "병살타" : "땅볼아웃";
-    } else if (landing.y < 250 && physics.carry > 220) {
-      const hasForce = game.bases.first && game.outs < 2;
-      result = hasForce && Math.random() < 0.06 ? "병살타" : "1루타";
+      result = hasForce && Math.random() < 0.28 ? "병살타" : "땅볼아웃";
+    } else if (landing.y < 240 && physics.carry > 200) {
+      // Hard grounder past infield — single
+      result = "1루타";
     } else {
+      // Tight play — favors the runner
       result = "1루타";
     }
   } else {
     // Air ball that wasn't caught — drops in or carries past
-    if (physics.carry > 470 && speed > 72 && Math.random() < 0.30) result = "3루타";
-    else if (physics.carry > 360 || physics.landingY < 200) result = "2루타";
+    if (physics.carry > 430 && speed > 72 && Math.random() < 0.34) result = "3루타";
+    else if (physics.carry > 320 || physics.landingY < 220) result = "2루타";
     else result = "1루타";
   }
 
@@ -3036,10 +3043,10 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const timing = ball.t - 0.84; // negative = early swing, positive = late
   const timingAbs = Math.abs(timing);
 
-  if (totalQuality < 0.10 && timingAbs > 0.32) {
+  if (totalQuality < 0.06 && timingAbs > 0.42) {
     return { swingMiss: true, totalQuality };
   }
-  if (totalQuality < 0.18 && timingAbs > 0.22) {
+  if (totalQuality < 0.12 && timingAbs > 0.30) {
     return { foul: true, totalQuality, fair: false, exitVel: 70, launchAngle: 30, sprayAngle: 0,
              landingX: FIELD.plate.x + (Math.random() < 0.5 ? -120 : 120), landingY: 320, hangTime: 0.6, carry: 100 };
   }
@@ -3052,8 +3059,8 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
 
   // Exit velocity (canvas-pixel "speed" units). Real range ~ 60-180.
   const exitVel = clamp(
-    power * 0.72 + (game.swingPower || 50) * 0.50 + totalQuality * 92 - pitchDifficulty * 0.22 - timingAbs * 210 + randomInt(-10, 12),
-    32, 205
+    power * 0.86 + (game.swingPower || 50) * 0.55 + totalQuality * 110 - pitchDifficulty * 0.18 - timingAbs * 190 + randomInt(-8, 14),
+    50, 210
   );
 
   // Launch angle from bat angle ≈ contact location on barrel.
@@ -3415,8 +3422,8 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const timing = timingSign * timingDiff / 100;
 
   const exitVel = clamp(
-    powerScore * 0.66 + totalQuality * 92 - timingDiff * 0.55 + randomInt(-10, 12),
-    32, 205
+    powerScore * 0.80 + totalQuality * 110 - timingDiff * 0.45 + randomInt(-8, 14),
+    50, 210
   );
 
   const launchDeg = clamp(
@@ -5318,6 +5325,7 @@ window.fullcountSeason = {
   },
   playerPhoto: playerPhotoUrl,
 };
+
 
 function loadRecord() {
   try {
