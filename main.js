@@ -3086,11 +3086,16 @@ function resolvePitchingResult(aiSwung) {
   const powerScore = batter.power + batter.launch * 0.12 + randomInt(-15, 15) - pitchDifficulty * 0.2 + diffMod.power;
   game.ball.active = false;
 
-  if (timingDiff > 44 || contactScore < 42) {
-    addStrike("AI 헛스윙!");
+  if (timingDiff > 60 || contactScore < 26) {
+    if (Math.random() < 0.5) {
+      addStrike("AI 헛스윙!");
+      return;
+    }
+    if (powerScore > 88 && Math.random() < 0.18) { applyHitResult("홈런"); return; }
+    applyHitResult(Math.random() < 0.34 ? "1루타" : "땅볼아웃");
     return;
   }
-  if (contactScore < 57 || Math.random() < 0.26) {
+  if (contactScore < 44 || Math.random() < 0.14) {
     addStrike("파울!", true);
     startHitAnimation("파울", 150, "#f7f7f7");
     return;
@@ -3102,26 +3107,31 @@ function resolvePitchingResult(aiSwung) {
 function chooseAIBattedBallResult({ batter, contactScore, powerScore, timingDiff, fatigue }) {
   const roll = Math.random();
   const forceAtSecond = game.bases.first && game.outs < 2;
-  const solidContact = contactScore > 78 && timingDiff < 20;
-  const weakContact = contactScore < 66 || timingDiff > 34;
+  const solidContact = contactScore > 68 && timingDiff < 26;
+  const weakContact = contactScore < 54 || timingDiff > 42;
 
-  if (forceAtSecond && weakContact && roll < 0.34) return "병살타";
+  if (forceAtSecond && weakContact && roll < 0.28) return "병살타";
   if (weakContact) {
-    if (roll < 0.42) return "땅볼아웃";
-    if (roll < 0.74) return "플라이아웃";
-    if (roll < 0.88) return "파울";
-    return "1루타";
+    if (powerScore > 88 && roll < 0.18) return "홈런";
+    if (roll < 0.30) return "땅볼아웃";
+    if (roll < 0.52) return "플라이아웃";
+    if (roll < 0.74) return "1루타";
+    if (roll < 0.86) return "2루타";
+    return "파울";
   }
 
-  if (powerScore > 116 && solidContact && roll < 0.32 + fatigue * 0.1) return "홈런";
-  if (powerScore > 104 && solidContact && roll < 0.18) return "홈런";
-  if (powerScore > 100 && solidContact && roll < 0.36) return batter.speed > 78 && roll < 0.08 ? "3루타" : "2루타";
-  if (forceAtSecond && contactScore < 74 && roll < 0.18) return "병살타";
-  if (roll < 0.30) return "땅볼아웃";
-  if (roll < 0.52) return "플라이아웃";
-  if (roll < 0.76) return "1루타";
-  if (roll < 0.88) return "2루타";
-  return powerScore > 104 ? "홈런" : "파울";
+  if (powerScore > 96 && solidContact && roll < 0.46 + fatigue * 0.12) return "홈런";
+  if (powerScore > 86 && solidContact && roll < 0.34) return "홈런";
+  if (powerScore > 76 && solidContact && roll < 0.22) return "홈런";
+  if (powerScore > 80 && solidContact && roll < 0.42) return batter.speed > 78 && roll < 0.10 ? "3루타" : "2루타";
+  if (forceAtSecond && contactScore < 60 && roll < 0.14) return "병살타";
+  if (powerScore > 92 && roll < 0.32) return "홈런";
+  if (powerScore > 82 && roll < 0.22) return "홈런";
+  if (roll < 0.18) return "땅볼아웃";
+  if (roll < 0.34) return "플라이아웃";
+  if (roll < 0.66) return "1루타";
+  if (roll < 0.82) return "2루타";
+  return powerScore > 80 ? "홈런" : "1루타";
 }
 
 function resolveTakenPitch(mode) {
@@ -3530,12 +3540,12 @@ function getAIDiffMod() {
 
 function chooseAISwing() {
   const batter = getAIBatter();
-  const zoneBias = game.ball.inZone ? 0.34 : -0.26;
-  const countBias = game.strikes >= 2 ? 0.18 : game.balls >= 3 ? -0.08 : 0;
+  const zoneBias = game.ball.inZone ? 0.48 : -0.18;
+  const countBias = game.strikes >= 2 ? 0.22 : game.balls >= 3 ? -0.04 : 0;
   const fatigue = getFatigueLevel(game.currentPitcher);
   const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 100 + Math.abs(game.pitchMovement.x) / 170 - fatigue * 0.22;
   const mod = getAIDiffMod();
-  const chance = clamp(0.27 + batter.contact / 260 + batter.eye / 420 + zoneBias + countBias - difficulty + mod.swing, 0.06, 0.9);
+  const chance = clamp(0.42 + batter.contact / 240 + batter.eye / 420 + zoneBias + countBias - difficulty + mod.swing, 0.18, 0.95);
   return Math.random() < chance;
 }
 
