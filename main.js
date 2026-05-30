@@ -2866,59 +2866,204 @@ function resolveBattingResult() {
   const ball = game.ball;
   const batter = game.currentBatter;
   const contact = game.lastContact || getBatBallContact();
-  const contactQuality = contact ? (contact.quality * 0.65 + contact.sweetSpot * 0.35) : 0;
-  const timingDiff = Math.abs(ball.t - 0.84) * 82 + (1 - contactQuality) * 26;
-  const timingBonus = clamp(70 - timingDiff * 1.35, -30, 70);
-  const activePitcher = battingPitcher();
-  const pitchDifficulty = ball.speed * 0.22 + Math.abs(ball.movement.x) * 0.32 + Math.abs(ball.movement.y) * 0.16 + activePitcher.control * 0.12;
-  const contactScore = batter.contact + timingBonus + contactQuality * 24 - pitchDifficulty * 0.36 + randomInt(-10, 14);
-  const powerScore = batter.power + game.swingPower * 0.72 + contactQuality * 18 - pitchDifficulty * 0.18 + randomInt(-14, 16);
-  game.swingTiming = Math.round(100 - timingDiff);
+  if (!contact) {
+    game.ball.active = false;
+    addStrike("헛스윙!");
+    return;
+  }
+  const physics = computeBattedBallPhysics({ contact, batter, ball });
+  game.swingTiming = Math.round(100 - Math.abs(ball.t - 0.84) * 100);
   game.lastContact = {
-    ...(contact || {}),
-    quality: contactQuality,
-    timingDiff,
-    powerScore,
-    contactScore,
+    ...contact,
+    ...physics,
+    quality: physics.totalQuality,
+    timingDiff: Math.abs(ball.t - 0.84) * 100,
+    powerScore: physics.exitVel,
+    contactScore: physics.totalQuality * 100,
     batter,
   };
   game.ball.active = false;
 
-  if (timingDiff > 72 || contactScore < 26) {
-    if (Math.random() < 0.55) {
-      addStrike("파울!", true);
-      startHitAnimation("파울", 145, "#f7f7f7");
-      return;
-    }
-    if (powerScore > 96 && Math.random() < 0.18) { applyHitResult("홈런"); return; }
-    applyHitResult(Math.random() < 0.36 ? "1루타" : "땅볼아웃");
+  if (physics.swingMiss) {
+    addStrike("헛스윙!");
     return;
   }
-  if (timingDiff > 48 || contactScore < 42) {
-    if (Math.random() < 0.28) {
-      addStrike("파울!", true);
-      startHitAnimation("파울", 180, "#f7f7f7");
-      return;
-    }
-    if (powerScore > 92 && Math.random() < 0.22) { applyHitResult("홈런"); return; }
-    const r = Math.random();
-    if (r < 0.32) applyHitResult("1루타");
-    else if (r < 0.42) applyHitResult("2루타");
-    else applyHitResult(powerScore > 84 ? "플라이아웃" : "땅볼아웃");
+  if (game.buntMode) {
+    if (batter.bunt + randomInt(-20, 25) > 70) { applyHitResult("번트안타"); return; }
+    const force = game.bases.first && game.outs < 2;
+    applyHitResult(force && Math.random() < 0.28 ? "병살타" : "땅볼아웃");
     return;
   }
-
-  const result = chooseBattedBallResult({
-    batter,
-    contact,
-    contactQuality,
-    contactScore,
-    powerScore,
-    timingDiff,
-  });
+  if (physics.foul) {
+    addStrike("파울!", true);
+    startHitAnimation("파울", 145, "#f7f7f7");
+    return;
+  }
+  if (physics.isHR) {
+    const basesLoaded = game.bases.first && game.bases.second && game.bases.third;
+    applyHitResult(basesLoaded ? "만루홈런" : "홈런");
+    return;
+  }
+  const result = decideHitResultFromPhysics(physics, batter);
   applyHitResult(result);
 }
 
+// Physics-based batted ball computation: contact info → exit vel, launch & spray
+// angle, then projectile flight → landing point + hang time. Outcome is NOT
+// predetermined here; the result label is derived later from landing position
+// vs the nearest fielder's reach time.
+function computeBattedBallPhysics({ contact, batter, ball }) {
+  const along = Number.isFinite(contact.along) ? contact.along : 0.62;
+  const baseQuality = Number.isFinite(contact.quality) ? contact.quality : 0.5;
+  const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
+  const totalQuality = baseQuality * 0.55 + sweetSpot * 0.45;
+  const timing = ball.t - 0.84; // negative = early swing, positive = late
+  const timingAbs = Math.abs(timing);
+
+  if (totalQuality < 0.10 && timingAbs > 0.32) {
+    return { swingMiss: true, totalQuality };
+  }
+  if (totalQuality < 0.18 && timingAbs > 0.22) {
+    return { foul: true, totalQuality, fair: false, exitVel: 70, launchAngle: 30, sprayAngle: 0,
+             landingX: FIELD.plate.x + (Math.random() < 0.5 ? -120 : 120), landingY: 320, hangTime: 0.6, carry: 100 };
+  }
+
+  // Pitch resistance (better pitches reduce exit vel and skew launch angle)
+  const activePitcher = battingPitcher();
+  const pitchDifficulty = (ball.speed || 140) * 0.18 + Math.abs(ball.movement?.x || 0) * 0.22 + (activePitcher?.breaking || 60) * 0.14;
+  const power = batter.power || 60;
+  const launchTrait = batter.launch || 60;
+
+  // Exit velocity (canvas-pixel "speed" units). Real range ~ 60-180.
+  const exitVel = clamp(
+    power * 0.62 + (game.swingPower || 50) * 0.42 + totalQuality * 80 - pitchDifficulty * 0.25 - timingAbs * 220 + randomInt(-10, 12),
+    32, 185
+  );
+
+  // Launch angle from bat angle ≈ contact location on barrel.
+  //   along < 0.55 → topspin grounder (negative angle)
+  //   along ~ 0.72 → sweet spot, slight uppercut (~15-25°)
+  //   along > 0.88 → popup (40°+)
+  const launchDeg = clamp(
+    (along - 0.55) * 95 + launchTrait * 0.16 - 14 + (sweetSpot > 0.72 ? randomInt(0, 10) : 0) + randomInt(-7, 7),
+    -32, 75
+  );
+
+  // Spray angle: timing skews left/right; early pulls, late goes opposite field
+  const pullSide = batter.bats === "L" ? 1 : -1;
+  const sprayDeg = clamp(
+    -timing * pullSide * 240 + (batter.pull || 0) * 28 + randomInt(-22, 22),
+    -52, 52
+  );
+
+  // Projectile: carry distance from v² sin(2θ) / g, in canvas units.
+  const launchRad = launchDeg * Math.PI / 180;
+  const sprayRad = sprayDeg * Math.PI / 180;
+  let carry;
+  if (launchDeg < 4) {
+    carry = exitVel * 1.65 + 80; // line-drives roll/skip
+  } else {
+    carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 78 + 70;
+  }
+  carry = clamp(carry, 80, 640);
+
+  const hangTime = launchDeg > 5
+    ? clamp(0.5 + (exitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
+    : 0.42;
+
+  const landingX = FIELD.plate.x + carry * Math.sin(sprayRad);
+  const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
+
+  const fair = isInFairTerritory(landingX, landingY);
+  const isHR = fair && launchDeg > 18 && carry > 430 && landingY < 95;
+
+  const isPopup = launchDeg > 52;
+  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
+  const isLineDrive = launchDeg > 6 && launchDeg <= 22 && exitVel > 70;
+  const isGroundBall = launchDeg <= 6;
+
+  return {
+    totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
+    carry, hangTime, landingX, landingY,
+    fair, foul: !fair, isHR,
+    isFlyBall, isLineDrive, isGroundBall, isPopup,
+  };
+}
+
+function isInFairTerritory(x, y) {
+  if (y > FIELD.home.y - 18) return false;
+  if (y < 30) return x > 240 && x < 720; // very deep, narrow fence area
+  const bounds = fairBoundsAtY(y);
+  return x >= bounds.left + 4 && x <= bounds.right - 4;
+}
+
+// Given physics, look at nearest fielder + reach time vs ball flight time;
+// derive the actual play outcome (catch / single / double / triple / out).
+function decideHitResultFromPhysics(physics, batter) {
+  const speed = batter.speed || 60;
+  const landing = { x: physics.landingX, y: physics.landingY };
+
+  // Field set based on ball type + depth
+  const isShallow = physics.landingY > 250;
+  const candidates = (physics.isFlyBall || physics.isLineDrive) && !isShallow
+    ? game.fielders.filter((f) => ["LF", "CF", "RF", "SS", "2B"].includes(f.label))
+    : game.fielders.filter((f) => ["1B", "2B", "SS", "3B", "p"].includes(f.label));
+  const fielder = nearestFielder(candidates, landing) || game.fielders[0];
+
+  const fdx = (fielder?.homeX ?? FIELD.mound.x) - landing.x;
+  const fdy = (fielder?.homeY ?? FIELD.mound.y) - landing.y;
+  const fieldDist = Math.hypot(fdx, fdy);
+  const reactionTime = 0.18 + Math.random() * 0.16;
+  const fielderTime = reactionTime + fieldDist / ((fielder?.speed || 170) * 0.78);
+  const margin = physics.hangTime - fielderTime;
+
+  // Popup near infield — almost always caught
+  if (physics.isPopup && fieldDist < 130) return "플라이아웃";
+
+  // Fly ball: fielder must reach landing point before it lands
+  if (physics.isFlyBall) {
+    if (margin > 0.08 && Math.random() < 0.92) return "플라이아웃";
+    if (margin > -0.4 && fieldDist < 95 && Math.random() < 0.42) return "플라이아웃";
+    // Ball drops in; depth determines bases
+    if (physics.carry > 470 && speed > 72 && Math.random() < 0.30) return "3루타";
+    if (physics.carry > 360 || physics.landingY < 200) return "2루타";
+    return "1루타";
+  }
+
+  // Line drive: caught only when right at fielder
+  if (physics.isLineDrive) {
+    if (fieldDist < 40 && Math.random() < 0.48) return "플라이아웃";
+    if (physics.carry > 330 || physics.landingY < 230) return "2루타";
+    return "1루타";
+  }
+
+  // Ground ball: fielder picks up, then races throw vs batter
+  if (physics.isGroundBall) {
+    // Cheap infield single past the line
+    if (physics.landingY < 245 && physics.carry > 210) {
+      const hasForce = game.bases.first && game.outs < 2;
+      if (hasForce && Math.random() < 0.06) return "병살타";
+      return "1루타";
+    }
+    // Slow roller and fast runner = infield single
+    if (physics.carry < 150 && speed > 76 && Math.random() < 0.32) return "1루타";
+    // Routine grounder: fielder reaches, throws to first
+    const throwDist = Math.hypot(FIELD.first.x - landing.x, FIELD.first.y - landing.y);
+    const throwTime = throwDist / 500 + 0.18;
+    const fielderTotalTime = fielderTime + throwTime;
+    const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
+    const safeMargin = batterRunTime - fielderTotalTime;
+    if (safeMargin > 0.22) return "1루타";
+    const hasForce = game.bases.first && game.outs < 2;
+    if (hasForce && Math.random() < 0.24) return "병살타";
+    return "땅볼아웃";
+  }
+
+  return "1루타";
+}
+
+// Legacy probability-based result picker — kept for code paths that don't yet
+// have a physical contact (e.g. fallback for buntMode that pre-computes early).
 function chooseBattedBallResult({ batter, contact, contactQuality, contactScore, powerScore, timingDiff }) {
   const basesLoaded = game.bases.first && game.bases.second && game.bases.third;
   const hasForceAtSecond = game.bases.first && game.outs < 2;
@@ -3828,7 +3973,8 @@ function getRunnerBasePoint(base) {
 
 function startHitAnimation(result, distance, color) {
   game.playPhase = "타구 처리";
-  const target = chooseFieldingTarget(result, distance);
+  const contact = game.lastContact;
+  const usePhysics = contact && Number.isFinite(contact.landingX) && Number.isFinite(contact.landingY) && result !== "파울";
   const isHomer = result.includes("홈런");
   const isOutBall = result.includes("아웃") || result === "병살타";
   const isBaseHit = ["1루타", "2루타", "3루타", "번트안타"].includes(result);
@@ -3836,9 +3982,25 @@ function startHitAnimation(result, distance, color) {
     x: FIELD.plate.x + randomInt(-10, 10),
     y: FIELD.plate.y + randomInt(-7, 6),
   };
+  let target;
+  if (usePhysics) {
+    const endX = isHomer
+      ? clamp(contact.landingX, 60, W - 60)
+      : clamp(contact.landingX, 30, W - 30);
+    const endY = isHomer ? randomInt(-60, 14) : clamp(contact.landingY, 70, FIELD.home.y - 30);
+    const arc = Math.min(220, (contact.hangTime || 0.8) * 90 + (contact.launchAngle || 18) * 1.4);
+    target = {
+      end: { x: endX, y: endY },
+      peak: { x: (start.x + endX) / 2 + randomInt(-20, 20), y: clamp(start.y - arc, -40, 270) },
+    };
+  } else {
+    target = chooseFieldingTarget(result, distance);
+  }
   const duration = isHomer
     ? 1.12 + Math.random() * 0.68
-    : clamp(0.72 + Math.random() * 0.5 + (target.end.y < 230 ? 0.12 : 0), 0.68, 1.34);
+    : usePhysics
+      ? clamp((contact.hangTime || 0.9) + 0.18, 0.55, 1.6)
+      : clamp(0.72 + Math.random() * 0.5 + (target.end.y < 230 ? 0.12 : 0), 0.68, 1.34);
   game.impact = {
     timer: isHomer ? 0.45 : 0.28,
     shake: isHomer ? 10 : result === "파울" ? 2 : 5,
