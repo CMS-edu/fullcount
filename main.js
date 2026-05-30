@@ -2977,8 +2977,8 @@ function checkInFlightCatch() {
   const fielderArrived = Math.hypot(closest.x - closest.targetX, closest.y - closest.targetY) < 4;
   if (!fielderArrived) return;
   const dist = Math.hypot(closest.x - pos.x, closest.y - pos.y);
-  // Generous on popups, stingier on flies/liners so well-struck balls find gaps
-  const range = physics.isPopup ? 24 : physics.isFlyBall ? 16 : 11;
+  // Generous on popups, tight on deep flies so HRs and gappers escape
+  const range = physics.isPopup ? 24 : physics.isFlyBall ? 14 : 10;
   if (dist < range) {
     game.hitBall.caughtInFlight = true;
     closest.hasBall = true;
@@ -3023,8 +3023,8 @@ function resolvePendingPlay({ caughtInFlight, fielder }) {
     }
   } else {
     // Air ball that wasn't caught — drops in or carries past
-    if (physics.carry > 430 && speed > 72 && Math.random() < 0.34) result = "3루타";
-    else if (physics.carry > 320 || physics.landingY < 220) result = "2루타";
+    if (physics.carry > 380 && speed > 72 && Math.random() < 0.38) result = "3루타";
+    else if (physics.carry > 270 || physics.landingY < 240) result = "2루타";
     else result = "1루타";
   }
 
@@ -3059,8 +3059,8 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
 
   // Exit velocity (canvas-pixel "speed" units). Real range ~ 60-180.
   const exitVel = clamp(
-    power * 0.86 + (game.swingPower || 50) * 0.55 + totalQuality * 110 - pitchDifficulty * 0.18 - timingAbs * 190 + randomInt(-8, 14),
-    50, 210
+    power * 0.95 + (game.swingPower || 50) * 0.60 + totalQuality * 120 - pitchDifficulty * 0.15 - timingAbs * 170 + randomInt(-6, 18),
+    55, 230
   );
 
   // Launch angle from bat angle ≈ contact location on barrel.
@@ -3086,7 +3086,7 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   if (launchDeg < 4) {
     carry = exitVel * 1.65 + 80; // line-drives roll/skip
   } else {
-    carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 78 + 70;
+    carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 58 + 80;
   }
   carry = clamp(carry, 80, 640);
 
@@ -3098,7 +3098,7 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 18 && carry > 380 && landingY < 110;
+  const isHR = fair && launchDeg > 16 && carry > 360 && landingY < 130;
 
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
@@ -3409,11 +3409,10 @@ function resolvePitchingResult(aiSwung) {
 // AI side has no manual bat swing → synthesize along/timing from contactScore
 // + timingDiff and run the same physics + landing+fielder outcome logic.
 function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, timingDiff, fatigue }) {
-  const qualityRaw = clamp((contactScore - 30) / 80, 0, 1);
+  const qualityRaw = clamp((contactScore - 20) / 65, 0, 1);
   // Synthesize how close to sweet spot the AI's bat would have been.
-  // Center near sweet spot with moderate spread for a realistic
-  // ground/liner/fly distribution.
-  const along = clamp(0.46 + qualityRaw * 0.30 + (Math.random() - 0.5) * 0.28, 0.18, 0.95);
+  // Pushed slightly toward the sweet spot — we want a hitter-friendly game.
+  const along = clamp(0.52 + qualityRaw * 0.28 + (Math.random() - 0.5) * 0.26, 0.18, 0.95);
   const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
   const totalQuality = qualityRaw * 0.55 + sweetSpot * 0.45;
 
@@ -3422,8 +3421,8 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const timing = timingSign * timingDiff / 100;
 
   const exitVel = clamp(
-    powerScore * 0.80 + totalQuality * 110 - timingDiff * 0.45 + randomInt(-8, 14),
-    50, 210
+    powerScore * 0.84 + totalQuality * 112 - timingDiff * 0.42 + randomInt(-8, 14),
+    52, 215
   );
 
   const launchDeg = clamp(
@@ -3452,7 +3451,7 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 18 && carry > 380 && landingY < 110;
+  const isHR = fair && launchDeg > 16 && carry > 360 && landingY < 130;
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
   const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
