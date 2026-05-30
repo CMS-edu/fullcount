@@ -662,7 +662,7 @@ function selectUserTeam(name) {
   game.userTeam = team;
   localStorage.setItem("fullcount:userTeam", team.name);
   game.selectedLineup = loadSavedLineup(team);
-  game.selectedPitcher = loadSavedPitcher(team);
+  game.selectedPitcher = loadSavedPitcher(team) || (team.starters[0] ? clonePitcher(team.starters[0]) : null);
   game.currentPitcher = game.selectedPitcher ? clonePitcher(game.selectedPitcher) : null;
   game.selectedPitch = game.currentPitcher?.pitches[0] || "직구";
   setupTeams();
@@ -775,7 +775,7 @@ function resetGame(toIntro = true) {
   game.battingOrderIndex = 0;
   game.aiBattingOrderIndex = 0;
   game.selectedLineup = loadSavedLineup(game.userTeam);
-  game.selectedPitcher = loadSavedPitcher(game.userTeam);
+  game.selectedPitcher = loadSavedPitcher(game.userTeam) || (game.userTeam.starters[0] ? clonePitcher(game.userTeam.starters[0]) : null);
   game.currentPitcher = game.selectedPitcher ? clonePitcher(game.selectedPitcher) : null;
   if (!game.aiTeam || toIntro) setupTeams();
   game.aiPitcher = clonePitcher(selectOpponentStarter());
@@ -3478,9 +3478,17 @@ function switchHalfInning(forceBottom = false) {
       if (isPvPMode()) {
         prepareBattingPitch();
       } else {
+        // Defensive: ensure we have a pitcher before entering pitching mode.
+        if (!game.currentPitcher) {
+          const fallback = currentUserTeam().starters[0];
+          if (fallback) {
+            game.currentPitcher = clonePitcher(fallback);
+            game.selectedPitcher = clonePitcher(fallback);
+          }
+        }
         game.state = "pitching";
         game.playPhase = "구종 선택";
-        game.selectedPitch = game.currentPitcher.pitches[0];
+        game.selectedPitch = game.currentPitcher?.pitches?.[0] || "직구";
       }
       syncCurrentMatchup();
       renderUI(true);
@@ -4964,6 +4972,12 @@ function startLeagueMatch({ leagueId, matchIdx, home, away, innings, userTeam: e
   game.aiTeam = opponent;
   game.aiPitcher = clonePitcher(selectOpponentStarter());
   resetGame(false);
+  // Final guarantee: if user team has no saved pitcher, fall back to first starter.
+  if (!game.currentPitcher && userTeamObj.starters[0]) {
+    game.currentPitcher = clonePitcher(userTeamObj.starters[0]);
+    game.selectedPitcher = clonePitcher(userTeamObj.starters[0]);
+  }
+  game.selectedPitch = game.currentPitcher?.pitches?.[0] || "직구";
   startGame();
 }
 
@@ -5062,10 +5076,17 @@ window.fullcountGame = {
     return { lineup, pitcher };
   },
   onGameViewActivated() {
+    // Skip if a game is already in progress (e.g., a league match just started
+    // and we don't want to overwrite the runtime lineup/pitcher with savefile values).
+    const inGame = ["batting", "pitching", "bullpen", "result", "inningChange"].includes(game.state);
+    if (inGame) {
+      renderUI(true);
+      return;
+    }
     const team = loadSavedTeam();
     game.userTeam = team;
     game.selectedLineup = loadSavedLineup(team);
-    game.selectedPitcher = loadSavedPitcher(team);
+    game.selectedPitcher = loadSavedPitcher(team) || (team.starters[0] ? clonePitcher(team.starters[0]) : null);
     game.currentPitcher = game.selectedPitcher ? clonePitcher(game.selectedPitcher) : null;
     game.selectedPitch = game.currentPitcher?.pitches[0] || "직구";
     if (!game.aiTeam) setupTeams();
