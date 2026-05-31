@@ -1356,6 +1356,15 @@ function updateBatting(deltaTime) {
       game.playPhase = "상대 투구 대기";
       return;
     }
+    // Don't start the next pitch while the previous play is still resolving:
+    // ball still flying, throw still in air, runners moving, deferred tag.
+    const playInProgress = game.hitBall || game.throwBall
+      || (game.pendingTagPlay && !game.pendingTagPlay.resolved)
+      || game.runnerAnimations.some((a) => a.t < 1);
+    if (playInProgress) {
+      game.playPhase = "타구 처리 중";
+      return;
+    }
     game.playPhase = "투구 대기";
     game.pitchDelay -= deltaTime;
     if (game.pitchDelay <= 0) startPitch(chooseAIPitch(), "batting");
@@ -3098,7 +3107,7 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 16 && carry > 360 && landingY < 130;
+  const isHR = fair && launchDeg > 20 && carry > 400 && landingY < 120;
 
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
@@ -3421,8 +3430,8 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const timing = timingSign * timingDiff / 100;
 
   const exitVel = clamp(
-    powerScore * 0.84 + totalQuality * 112 - timingDiff * 0.42 + randomInt(-8, 14),
-    52, 215
+    powerScore * 0.82 + totalQuality * 110 - timingDiff * 0.44 + randomInt(-8, 14),
+    52, 210
   );
 
   const launchDeg = clamp(
@@ -3451,7 +3460,7 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 16 && carry > 360 && landingY < 130;
+  const isHR = fair && launchDeg > 20 && carry > 400 && landingY < 120;
   const isPopup = launchDeg > 52;
   const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
   const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
