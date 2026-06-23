@@ -43,12 +43,12 @@ const BALL_ENGINE = {
 };
 
 const pitchCatalog = {
-  "직구": { speedModifier: 16, movement: { x: 4, y: -2 }, controlDifficulty: 8, color: "#f4f7ff" },
-  "커브": { speedModifier: -24, movement: { x: -18, y: 42 }, controlDifficulty: 18, color: "#ffd36b" },
-  "체인지업": { speedModifier: -22, movement: { x: 10, y: 18 }, controlDifficulty: 12, color: "#65d68a" },
-  "슬라이더": { speedModifier: -6, movement: { x: -34, y: 8 }, controlDifficulty: 16, color: "#79a8ff" },
-  "투심": { speedModifier: 10, movement: { x: 18, y: 18 }, controlDifficulty: 13, color: "#ff9b70" },
-  "스위퍼": { speedModifier: -10, movement: { x: -50, y: 5 }, controlDifficulty: 21, color: "#c79bff" },
+  "직구": { speedModifier: 21, movement: { x: 4, y: -2 }, controlDifficulty: 8, color: "#f4f7ff" },
+  "커브": { speedModifier: -18, movement: { x: -18, y: 42 }, controlDifficulty: 18, color: "#ffd36b" },
+  "체인지업": { speedModifier: -17, movement: { x: 10, y: 18 }, controlDifficulty: 12, color: "#65d68a" },
+  "슬라이더": { speedModifier: -1, movement: { x: -34, y: 8 }, controlDifficulty: 16, color: "#79a8ff" },
+  "투심": { speedModifier: 15, movement: { x: 18, y: 18 }, controlDifficulty: 13, color: "#ff9b70" },
+  "스위퍼": { speedModifier: -5, movement: { x: -50, y: 5 }, controlDifficulty: 21, color: "#c79bff" },
 };
 
 const LINEUP_POSITIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
@@ -1546,9 +1546,10 @@ function checkLiveAirCatch() {
   if (!engine || engine.firstTouch || engine.z <= 8 || engine.vz >= 90) return;
   const active = game.fielders.filter((f) => f.active);
   if (!active.length) return;
-  const closest = nearestFielder(active, { x: engine.x, y: engine.y });
+  const closest = nearestFielderByGlove(active, { x: engine.x, y: engine.y });
   if (!closest) return;
-  const dist = Math.hypot(closest.x - engine.x, closest.y - engine.y);
+  const glove = fielderGlovePoint(closest);
+  const dist = Math.hypot(glove.x - engine.x, glove.y - engine.y);
   const heightOk = engine.z <= BALL_ENGINE.catchHeight || game.hitBall.physics?.isLineDrive;
   const range = game.hitBall.physics?.isPopup ? 24 : game.hitBall.physics?.isLineDrive ? 13 : BALL_ENGINE.gloveRadiusAir;
   if (heightOk && dist <= range) {
@@ -1563,10 +1564,11 @@ function checkLiveGroundFielding() {
   if (!engine || !engine.firstTouch || engine.z > 8 || engine.foul) return;
   const active = game.fielders.filter((f) => f.active);
   if (!active.length) return;
-  const closest = nearestFielder(active, { x: engine.x, y: engine.y });
+  const closest = nearestFielderByGlove(active, { x: engine.x, y: engine.y });
   if (!closest) return;
   const ballSpeed = Math.hypot(engine.vx, engine.vy);
-  const dist = Math.hypot(closest.x - engine.x, closest.y - engine.y);
+  const glove = fielderGlovePoint(closest);
+  const dist = Math.hypot(glove.x - engine.x, glove.y - engine.y);
   const range = ballSpeed > 300 ? 12 : BALL_ENGINE.gloveRadiusGround;
   if (dist <= range || engine.settled) {
     freezeLiveBallInGlove(engine, closest, false);
@@ -1576,18 +1578,19 @@ function checkLiveGroundFielding() {
 
 function freezeLiveBallInGlove(engine, fielder, airborneCatch) {
   if (!engine || !fielder) return;
-  engine.x = fielder.x;
-  engine.y = fielder.y;
+  const glove = fielderGlovePoint(fielder);
+  engine.x = glove.x;
+  engine.y = glove.y;
   engine.z = airborneCatch ? Math.min(engine.z || BALL_ENGINE.catchHeight, BALL_ENGINE.catchHeight) : 0;
   engine.vx = 0;
   engine.vy = 0;
   engine.vz = 0;
   engine.state = "fielded";
   engine.settled = true;
-  engine.fieldedAt = { x: fielder.x, y: fielder.y };
+  engine.fieldedAt = { x: glove.x, y: glove.y };
   engine.fieldedAtTime = engine.time;
   engine.fieldedBy = fielder;
-  engine.settlePoint = { x: fielder.x, y: fielder.y };
+  engine.settlePoint = { x: glove.x, y: glove.y };
   fielder.hasBall = true;
   pushLiveBallTrail(engine);
 }
@@ -2434,35 +2437,26 @@ function drawPlate() {
 function drawStrikeZoneGuide() {
   const zone = FIELD.strike;
   const L = zone.x - zone.w / 2;
-  const T = zone.y - zone.h / 2;
-  const W2 = zone.w;
-  const H2 = zone.h;
+  const R = zone.x + zone.w / 2;
   ctx.save();
-  // Outer shadow
-  ctx.strokeStyle = "rgba(0,0,0,0.55)";
-  ctx.lineWidth = 8;
-  ctx.strokeRect(L - 1, T - 1, W2 + 2, H2 + 2);
-  // Zone fill (very subtle)
-  ctx.fillStyle = "rgba(255,255,255,0.04)";
-  ctx.fillRect(L, T, W2, H2);
-  // White border
-  ctx.strokeStyle = "rgba(255,255,255,0.7)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(L, T, W2, H2);
-  // Red corner accents
-  const cs = 14;
-  ctx.strokeStyle = "#d71920";
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = "square";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(0,0,0,0.72)";
+  ctx.lineWidth = 14;
   ctx.beginPath();
-  // TL
-  ctx.moveTo(L, T + cs); ctx.lineTo(L, T); ctx.lineTo(L + cs, T);
-  // TR
-  ctx.moveTo(L + W2 - cs, T); ctx.lineTo(L + W2, T); ctx.lineTo(L + W2, T + cs);
-  // BL
-  ctx.moveTo(L, T + H2 - cs); ctx.lineTo(L, T + H2); ctx.lineTo(L + cs, T + H2);
-  // BR
-  ctx.moveTo(L + W2 - cs, T + H2); ctx.lineTo(L + W2, T + H2); ctx.lineTo(L + W2, T + H2 - cs);
+  ctx.moveTo(L - 10, zone.y);
+  ctx.lineTo(R + 10, zone.y);
+  ctx.stroke();
+  ctx.strokeStyle = "#ff1d25";
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(L, zone.y);
+  ctx.lineTo(R, zone.y);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(L, zone.y - 5);
+  ctx.lineTo(R, zone.y - 5);
   ctx.stroke();
   ctx.restore();
 }
@@ -3009,7 +3003,7 @@ function startPitch(pitchType, mode, options = {}) {
     start: pitchPath.start,
     end,
     t: 0,
-    duration: clamp(0.68 - (speed - 122) / 185 + randomInt(-6, 6) / 100, 0.22, 0.58),
+    duration: clamp(0.62 - (speed - 122) / 210 + randomInt(-5, 5) / 100, 0.2, 0.52),
     inZone,
     mistake,
     decisionMade: false,
@@ -3352,20 +3346,21 @@ function checkInFlightCatch() {
   const pos = quadraticPoint(game.hitBall.start, game.hitBall.peak, game.hitBall.end, t);
   const active = game.fielders.filter((f) => f.active);
   if (active.length === 0) return;
-  const closest = nearestFielder(active, pos);
+  const closest = nearestFielderByGlove(active, pos);
   if (!closest) return;
   // For a clean catch, the fielder must have actually arrived at their target
   // (i.e. they've finished sprinting, glove up, waiting under the ball).
   // If they're still mid-sprint when the ball drops in, no catch.
   const fielderArrived = Math.hypot(closest.x - closest.targetX, closest.y - closest.targetY) < 4;
   if (!fielderArrived) return;
-  const dist = Math.hypot(closest.x - pos.x, closest.y - pos.y);
+  const glove = fielderGlovePoint(closest);
+  const dist = Math.hypot(glove.x - pos.x, glove.y - pos.y);
   // Generous on popups, tight on deep flies so HRs and gappers escape
   const range = physics.isPopup ? 24 : physics.isFlyBall ? 14 : 10;
   if (dist < range) {
     game.hitBall.caughtInFlight = true;
     game.hitBall.t = 1;
-    game.hitBall.end = { x: closest.x, y: closest.y };
+    game.hitBall.end = { x: glove.x, y: glove.y };
     closest.hasBall = true;
     resolvePendingPlay({ caughtInFlight: true, fielder: closest });
   }
@@ -3671,14 +3666,14 @@ function projectPointToSegment(point, start, end) {
 
 function isPointInStrikeZone(point) {
   const zone = FIELD.strike;
-  const withinLineWidth = point.x >= zone.x - zone.w / 2 - 14 && point.x <= zone.x + zone.w / 2 + 14;
-  return withinLineWidth && Math.abs(point.y - zone.y) <= 9;
+  const withinLineWidth = point.x >= zone.x - zone.w / 2 && point.x <= zone.x + zone.w / 2;
+  return withinLineWidth && Math.abs(point.y - zone.y) <= 7;
 }
 
 function pitchTouchesStrikeLine(ballLike) {
   const zone = FIELD.strike;
-  const left = zone.x - zone.w / 2 - 14;
-  const right = zone.x + zone.w / 2 + 14;
+  const left = zone.x - zone.w / 2;
+  const right = zone.x + zone.w / 2;
   let prev = getPitchPoint(ballLike, 0);
   if (isPointInStrikeZone(prev)) return true;
   for (let i = 1; i <= 32; i += 1) {
@@ -3690,7 +3685,7 @@ function pitchTouchesStrikeLine(ballLike) {
 }
 
 function segmentTouchesStrikeLine(a, b, lineY, left, right) {
-  const tolerance = 9;
+  const tolerance = 7;
   if (Math.max(a.y, b.y) < lineY - tolerance || Math.min(a.y, b.y) > lineY + tolerance) return false;
   if (Math.abs(b.y - a.y) < 0.001) {
     return Math.abs(a.y - lineY) <= tolerance && Math.max(a.x, b.x) >= left && Math.min(a.x, b.x) <= right;
@@ -3709,12 +3704,14 @@ function resolvePitchingResult(aiSwung) {
   const fatigue = getFatigueLevel(game.currentPitcher);
   const pitchDifficulty = ball.speed * 0.17 + Math.abs(ball.movement.x) * 0.34 + game.currentPitcher.breaking * 0.26 - fatigue * 34;
   const diffMod = getAIDiffMod();
-  const contactScore = batter.contact + batter.eye * 0.18 + physicsNoise(batter, ball, game.aiSwingPoint || 0.84, 9) * 14 - pitchDifficulty * 0.4 + diffMod.contact;
-  const powerScore = batter.power + batter.launch * 0.12 + physicsNoise(batter, ball, game.aiSwingPoint || 0.84, 10) * 11 - pitchDifficulty * 0.2 + diffMod.power;
+  const chasePenalty = ball.inZone ? 0 : 18;
+  const twoStrikePressure = game.strikes >= 2 ? 7 : 0;
+  const contactScore = batter.contact + batter.eye * 0.13 + physicsNoise(batter, ball, game.aiSwingPoint || 0.84, 9) * 13 - pitchDifficulty * 0.52 - chasePenalty - twoStrikePressure + diffMod.contact;
+  const powerScore = batter.power + batter.launch * 0.1 + physicsNoise(batter, ball, game.aiSwingPoint || 0.84, 10) * 10 - pitchDifficulty * 0.28 - chasePenalty * 0.35 + diffMod.power;
   game.ball.active = false;
 
   // Total whiff
-  if (timingDiff > 64 && contactScore < 24) {
+  if ((timingDiff > 52 && contactScore < 34) || contactScore < 12) {
     addStrike("AI 헛스윙!");
     return;
   }
@@ -4165,7 +4162,8 @@ function chooseThrowOutPlan(plans, battedBall, result) {
   const throwCandidates = plans
     .map((plan) => {
       const basePoint = getRunnerBasePoint(plan.toBase);
-      const throwDistance = Math.hypot(basePoint.x - defense.fieldPoint.x, basePoint.y - defense.fieldPoint.y);
+      const throwFrom = defense.throwFrom || defense.fieldPoint;
+      const throwDistance = Math.hypot(basePoint.x - throwFrom.x, basePoint.y - throwFrom.y);
       const isOFThrow = ["LF", "CF", "RF"].includes(defense.fielder?.label);
       // Outfield throws are slower especially long ones to home
       const baseSpeed = isOFThrow ? 340 : 500;
@@ -4179,7 +4177,7 @@ function chooseThrowOutPlan(plans, battedBall, result) {
         beatBy,
         value,
         throwInfo: {
-          from: { ...defense.fieldPoint },
+          from: { ...throwFrom },
           to: basePoint,
           delay: defense.fieldTime + releaseDelay,
           duration: throwDuration,
@@ -4236,6 +4234,7 @@ function estimateDefenseTiming(battedBall, result) {
     return {
       fielder: battedBall.engine.fieldedBy || nearestFielderFromHome(game.fielders, battedBall.engine.fieldedAt),
       fieldPoint: battedBall.engine.fieldedAt,
+      throwFrom: battedBall.engine.fieldedAt,
       fieldTime: battedBall.engine.fieldedAtTime,
     };
   }
@@ -4251,6 +4250,7 @@ function estimateDefenseTiming(battedBall, result) {
   return {
     fielder,
     fieldPoint: target,
+    throwFrom: fielder ? fielderGlovePoint({ ...fielder, x: target.x - fielderGloveOffset(fielder).x, y: target.y - fielderGloveOffset(fielder).y }) : target,
     fieldTime: Math.max(ballTime, fielderTime) + 0.28,
   };
 }
@@ -4259,10 +4259,11 @@ function queueOutThrow(battedBall, toBase, extraDelay = 0) {
   if (!battedBall) return;
   const defense = estimateDefenseTiming(battedBall, battedBall.result);
   const to = getRunnerBasePoint(toBase);
-  const distance = Math.hypot(to.x - defense.fieldPoint.x, to.y - defense.fieldPoint.y);
+  const from = defense.throwFrom || defense.fieldPoint;
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
   const playElapsed = currentBattedBallElapsed(battedBall);
   game.throwBall = {
-    from: { ...defense.fieldPoint },
+    from: { ...from },
     to,
     delay: Math.max(0, defense.fieldTime + extraDelay - playElapsed),
     duration: Math.max(0.38, distance / 520 + 0.13),
@@ -4462,28 +4463,28 @@ function getDifficulty() {
 
 function getAIDiffMod() {
   const d = getDifficulty();
-  if (d === "easy")   return { swing: -0.18, contact: -24, power: -22, timing: 0.66 };
-  if (d === "hard")   return { swing:  0.12, contact:  16, power:  14, timing: 0.84 };
-  if (d === "expert") return { swing:  0.22, contact:  28, power:  26, timing: 0.89 };
-  return                     { swing:  0,    contact:   0, power:   0, timing: 0.78 };
+  if (d === "easy")   return { swing: -0.28, contact: -30, power: -24, timing: 0.66 };
+  if (d === "hard")   return { swing:  0.02, contact:   6, power:  10, timing: 0.84 };
+  if (d === "expert") return { swing:  0.1,  contact:  16, power:  20, timing: 0.89 };
+  return                     { swing: -0.1,  contact:  -8, power:  -2, timing: 0.78 };
 }
 
 function chooseAISwing() {
   const batter = getAIBatter();
-  const zoneBias = game.ball.inZone ? 0.48 : -0.18;
-  const countBias = game.strikes >= 2 ? 0.22 : game.balls >= 3 ? -0.04 : 0;
+  const zoneBias = game.ball.inZone ? 0.26 : -0.55;
+  const countBias = game.strikes >= 2 ? 0.16 : game.balls >= 3 ? -0.1 : 0;
   const fatigue = getFatigueLevel(game.currentPitcher);
-  const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 100 + Math.abs(game.pitchMovement.x) / 170 - fatigue * 0.22;
+  const difficulty = pitchCatalog[game.pitchType].controlDifficulty / 92 + Math.abs(game.pitchMovement.x) / 150 + Math.max(0, game.pitchSpeed - 145) / 120 - fatigue * 0.18;
   const mod = getAIDiffMod();
-  const chance = clamp(0.42 + batter.contact / 240 + batter.eye / 420 + zoneBias + countBias - difficulty + mod.swing, 0.18, 0.95);
+  const chance = clamp(0.27 + batter.contact / 305 + batter.eye / 620 + zoneBias + countBias - difficulty + mod.swing, 0.05, 0.78);
   return Math.random() < chance;
 }
 
 function calculatePitchSpeed(pitcherObj, pitchType) {
   const fatigue = getFatigueLevel(pitcherObj);
   const staminaPenalty = fatigue * fatigue * 18;
-  const raw = 132 + pitcherObj.velocity * 0.45 + pitchCatalog[pitchType].speedModifier + pitcherObj.stuff * 0.08 - staminaPenalty + randomInt(-pitcherObj.speedVariance, pitcherObj.speedVariance);
-  return Math.round(clamp(raw, 108, 174));
+  const raw = 137 + pitcherObj.velocity * 0.48 + pitchCatalog[pitchType].speedModifier + pitcherObj.stuff * 0.1 - staminaPenalty + randomInt(-pitcherObj.speedVariance, pitcherObj.speedVariance);
+  return Math.round(clamp(raw, 114, 182));
 }
 
 function calculatePitchMovement(pitcherObj, pitchType, batterObj) {
@@ -4893,8 +4894,9 @@ function sendFielderToBall(target, result) {
   if (!fielder) return;
   const exactRoute = Boolean(game.hitBall?.physics);
   const routeJitter = exactRoute ? 0 : result.includes("아웃") || result === "병살타" ? 10 : 26;
-  fielder.targetX = target.x + (routeJitter ? randomInt(-routeJitter, routeJitter) : 0);
-  fielder.targetY = target.y + (routeJitter ? randomInt(-routeJitter, routeJitter) : 0);
+  const glove = fielderGloveOffset(fielder);
+  fielder.targetX = target.x - glove.x + (routeJitter ? randomInt(-routeJitter, routeJitter) : 0);
+  fielder.targetY = target.y - glove.y + (routeJitter ? randomInt(-routeJitter, routeJitter) : 0);
   fielder.active = true;
   fielder.hasBall = result.includes("아웃") || result === "병살타";
 }
@@ -4905,6 +4907,30 @@ function nearestFielder(fielders, target) {
     if (!best || dist < best.dist) return { fielder, dist };
     return best;
   }, null)?.fielder;
+}
+
+function nearestFielderByGlove(fielders, target) {
+  return fielders.reduce((best, fielder) => {
+    const glove = fielderGlovePoint(fielder);
+    const dist = Math.hypot(glove.x - target.x, glove.y - target.y);
+    if (!best || dist < best.dist) return { fielder, dist };
+    return best;
+  }, null)?.fielder;
+}
+
+function fielderGloveOffset(fielder) {
+  if (!fielder) return { x: 0, y: 0 };
+  if (fielder.label === "p") return { x: 10, y: 2 };
+  if (fielder.label === "c") return { x: 8, y: 0 };
+  return { x: 14, y: 4 };
+}
+
+function fielderGlovePoint(fielder) {
+  const offset = fielderGloveOffset(fielder);
+  return {
+    x: (fielder?.x || 0) + offset.x,
+    y: (fielder?.y || 0) + offset.y,
+  };
 }
 
 function nearestFielderFromHome(fielders, target) {
