@@ -3399,9 +3399,10 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
     const hasForce = game.bases.first && game.outs < 2;
     const infieldZone = landing.y > FIELD.second.y - 8;
+    const hardThroughInfield = !engine?.fieldedAt && (!infieldZone || physics.exitVel > 148 || Math.abs(landing.x - FIELD.plate.x) > 215);
     const doublePlayLane = hasForce && infieldZone && physics.exitVel < 132 && ["SS", "2B", "3B", "p"].includes(defense.fielder?.label);
-    if (doublePlayLane && defTotal < batterRunTime - 0.58) result = "병살타";
-    else result = "1루타";
+    if (hardThroughInfield) result = "1루타";
+    else result = doublePlayLane ? "병살타" : "땅볼아웃";
   } else {
     const landing = engine?.firstTouch || engine?.fieldedAt || game.hitBall.end;
     game.hitBall.end = landing;
@@ -3858,13 +3859,22 @@ function applyHitResult(result, options = {}) {
   }
   if (result === "병살타") {
     const battedBall = skipBall ? game.hitBall : startHitAnimation("병살타", 140, "#e6d0a5");
-    const playElapsed = currentBattedBallElapsed(battedBall);
-    if (game.bases.first) animateRunner(game.bases.first, "first", "second", false, runnerTravelTime(game.bases.first, "first", "second"), { elapsed: playElapsed });
-    animateRunner(runner, "home", "first", true, runnerTravelTime(runner, "home", "first", true), { elapsed: playElapsed });
-    queueOutThrow(battedBall, "second", 0.08);
-    if (game.bases.first) game.bases.first = null;
-    recordBattingOutcome("병살타", 0);
-    recordOut(Math.min(2, 3 - game.outs), "병살타!");
+    const play = advanceRunners(1, runner, battedBall, result);
+    recordRuns(play.runs);
+    const text = play.contested
+      ? `땅볼 · ${play.outBaseLabel} 송구 중`
+      : (isOffense ? "내야안타!" : "내야안타 허용!");
+    if (play.contested) {
+      resetCount();
+      showResult(text, resultDurationWithThrow(1.35), () => {
+        nextBatter();
+        if (game.outs >= 3) switchHalfInning();
+        else resumeHalf();
+      });
+    } else {
+      recordBattingOutcome("1루타", play.runs);
+      finishPlateAppearance(text);
+    }
     return;
   }
   const bases = result === "2루타" ? 2 : result === "3루타" ? 3 : result === "홈런" || result === "만루홈런" ? 4 : 1;
@@ -3905,6 +3915,7 @@ function canScoreOnSacFly(battedBall, runner) {
 
 function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall, result = "1루타") {
   const playElapsed = currentBattedBallElapsed(battedBall);
+  const snapshotBases = { ...game.bases };
   if (basesToAdvance >= 4) {
     let runs = 1;
     for (const key of ["first", "second", "third"]) {
@@ -3960,6 +3971,10 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
       outResult: result === "1루타" ? "땅볼아웃" : result,
       runsBeforeDecision: runs,
       batterFirst: contested.isBatter && contested.toBase === "first",
+      forceOut: contested.forceOut === true,
+      batterRunner,
+      battedBall,
+      originBases: snapshotBases,
     };
   }
 
@@ -4017,11 +4032,54 @@ function applyTagOut(play) {
   }
   game.pendingTagPlay = null;
   updateLiveTagCall(`${baseDisplayName(play.toBase)} 송구 아웃!`);
+  if (tryStartDoublePlayRelay(play)) return;
   // If this tag completes the half-inning, switch right away. Otherwise the
   // current showResult timeout will handle the natural transition.
   if (game.outs >= 3 && game.state !== "result") {
     switchHalfInning();
   }
+}
+
+function tryStartDoublePlayRelay(play) {
+  if (!play || play.result !== "병살타" || play.toBase !== "second" || game.outs >= 3) return false;
+  const batterRunner = play.batterRunner;
+  if (!batterRunner) return false;
+  const playElapsed = currentBattedBallElapsed(play.battedBall);
+  const firstArrival = runnerTravelTime(batterRunner, "home", "first", true);
+  animateRunner(batterRunner, "home", "first", true, firstArrival, { elapsed: playElapsed });
+
+  const relayDelay = 0.26;
+  const throwDistance = Math.hypot(FIELD.first.x - FIELD.second.x, FIELD.first.y - FIELD.second.y);
+  const relayDuration = Math.max(0.42, throwDistance / 500 + 0.2);
+  const throwInfo = {
+    from: getRunnerBasePoint("second"),
+    to: getRunnerBasePoint("first"),
+    delay: relayDelay,
+    duration: relayDuration,
+    timer: 0,
+  };
+  game.throwBall = throwInfo;
+  game.pendingTagPlay = {
+    runner: batterRunner,
+    toBase: "first",
+    toNo: 1,
+    runnerArrivalAt: Math.max(0, firstArrival - playElapsed),
+    throwArrivalAt: relayDelay + relayDuration,
+    elapsed: 0,
+    resolved: false,
+    runs: 0,
+    result: "병살타",
+    safeResult: "땅볼아웃",
+    outResult: "병살타",
+    runsBeforeDecision: play.runsBeforeDecision || 0,
+    batterFirst: true,
+    forceOut: true,
+    batterRunner,
+    battedBall: play.battedBall,
+    relay: true,
+  };
+  updateLiveTagCall("2루 아웃 · 1루 재송구 중");
+  return true;
 }
 
 function applyTagSafe(play) {
@@ -4080,6 +4138,7 @@ function makeRunnerPlan(runner, fromBase, toBase, fromNo, toNo, isBatter = false
     isBatter,
     runnerTime: runnerTravelTime(runner, fromBase, toBase, isBatter),
     out: false,
+    forceOut: !isBatter && toNo === fromNo + 1,
   };
 }
 
@@ -4110,8 +4169,9 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       const isOFThrow = ["LF", "CF", "RF"].includes(defense.fielder?.label);
       // Outfield throws are slower especially long ones to home
       const baseSpeed = isOFThrow ? 340 : 500;
+      const releaseDelay = defensiveReleaseDelay(defense.fielder, result, plan);
       const throwDuration = Math.max(0.42, throwDistance / baseSpeed + 0.20);
-      const throwArrival = defense.fieldTime + throwDuration;
+      const throwArrival = defense.fieldTime + releaseDelay + throwDuration;
       const beatBy = plan.runnerTime - throwArrival;
       const value = plan.toBase === "home" ? 4 : plan.toBase === "third" ? 3 : plan.toBase === "second" ? 2 : 1;
       return {
@@ -4121,12 +4181,19 @@ function chooseThrowOutPlan(plans, battedBall, result) {
         throwInfo: {
           from: { ...defense.fieldPoint },
           to: basePoint,
-          delay: defense.fieldTime,
+          delay: defense.fieldTime + releaseDelay,
           duration: throwDuration,
         },
       };
     })
     .filter(({ plan, beatBy }) => {
+      if (result === "병살타") {
+        if (plan.fromBase !== "first" || plan.toBase !== "second") return false;
+        const fielderLabel = defense.fielder?.label || "";
+        const infieldFielder = ["p", "1B", "2B", "SS", "3B"].includes(fielderLabel);
+        if (!infieldFielder) return false;
+        return beatBy > -0.02;
+      }
       if (plan.isBatter && (result === "1루타" || result === "땅볼아웃")) {
         if (plan.toBase !== "first") return false;
         const fielderLabel = defense.fielder?.label || "";
@@ -4152,6 +4219,16 @@ function chooseThrowOutPlan(plans, battedBall, result) {
   if (!throwCandidates[0]) return null;
   throwCandidates[0].plan.throwInfo = throwCandidates[0].throwInfo;
   return throwCandidates[0].plan;
+}
+
+function defensiveReleaseDelay(fielder, result, plan) {
+  const label = fielder?.label || "";
+  let delay = 0.24;
+  if (["LF", "CF", "RF"].includes(label)) delay = 0.42;
+  if (label === "p") delay = 0.28;
+  if (result === "병살타" && plan?.toBase === "second") delay += 0.12;
+  if (plan?.toBase === "home") delay += 0.08;
+  return delay;
 }
 
 function estimateDefenseTiming(battedBall, result) {
@@ -5840,6 +5917,8 @@ window.render_game_to_text = () =>
           throwArrivalAt: Number(game.pendingTagPlay.throwArrivalAt.toFixed(2)),
           elapsed: Number(game.pendingTagPlay.elapsed.toFixed(2)),
           batterFirst: game.pendingTagPlay.batterFirst === true,
+          forceOut: game.pendingTagPlay.forceOut === true,
+          relay: game.pendingTagPlay.relay === true,
         }
       : null,
     batter: game.currentBatter?.name || null,
