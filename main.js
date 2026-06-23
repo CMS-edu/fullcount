@@ -16,7 +16,7 @@ const FIELD = {
   plate: { x: 480, y: 652 },
   catcher: { x: 480, y: 690 },
   batter: { x: 535, y: 638 },
-  strike: { x: 480, y: 672, w: 198, h: 62 },
+  strike: { x: 480, y: 694, w: 104, h: 34 },
   fielders: {
     p: { x: 480, y: 500 },
     c: { x: 480, y: 690 },
@@ -2961,33 +2961,33 @@ function startPitch(pitchType, mode, options = {}) {
   let end;
   if (mistake) {
     end = {
-      x: zone.x + randomInt(-15, 15),
-      y: zone.y + randomInt(-10, 10),
+      x: zone.x + randomInt(-18, 18),
+      y: zone.y + randomInt(-5, 7),
     };
     movement.x *= 0.35;
     movement.y *= 0.35;
   } else if (plannedStrike) {
     end = {
-      x: clamp(zone.x + movement.x * 0.18 + randomInt(-24, 24), zone.x - zone.w / 2 + 10, zone.x + zone.w / 2 - 10),
-      y: clamp(zone.y + movement.y * 0.12 + randomInt(-18, 18), zone.y - zone.h / 2 + 8, zone.y + zone.h / 2 - 8),
+      x: clamp(zone.x + movement.x * 0.12 + randomInt(-18, 18), zone.x - zone.w / 2 + 6, zone.x + zone.w / 2 - 6),
+      y: zone.y + randomInt(-5, 8),
     };
   } else {
     const missSide = randomInt(0, 3);
-    const missX = randomInt(28, 96 + Math.round(fatigue * 46));
-    const missY = randomInt(22, 72 + Math.round(fatigue * 32));
+    const missX = randomInt(22, 82 + Math.round(fatigue * 42));
+    const missY = randomInt(18, 64 + Math.round(fatigue * 30));
     end = {
       x:
         missSide === 0
           ? zone.x - zone.w / 2 - missX
           : missSide === 1
             ? zone.x + zone.w / 2 + missX
-            : zone.x + randomInt(-Math.floor(zone.w / 2), Math.floor(zone.w / 2)),
+            : zone.x + randomInt(-Math.floor(zone.w / 2) + 4, Math.floor(zone.w / 2) - 4),
       y:
         missSide === 2
-          ? zone.y - zone.h / 2 - missY
+          ? zone.y - 8 - missY
           : missSide === 3
-            ? zone.y + zone.h / 2 + missY
-            : zone.y + randomInt(-Math.floor(zone.h / 2), Math.floor(zone.h / 2)),
+            ? zone.y + 8 + missY
+            : zone.y + randomInt(-6, 10),
     };
   }
   const pitchPath = { start: { ...FIELD.mound }, end, movement };
