@@ -8,25 +8,25 @@ const H = canvas.height;
 const TWO_PI = Math.PI * 2;
 
 const FIELD = {
-  home: { x: 480, y: 500 },
-  first: { x: 638, y: 372 },
-  second: { x: 480, y: 245 },
-  third: { x: 322, y: 372 },
-  mound: { x: 480, y: 370 },
-  plate: { x: 480, y: 492 },
-  catcher: { x: 480, y: 522 },
-  batter: { x: 535, y: 478 },
-  strike: { x: 480, y: 512, w: 190, h: 62 },
+  home: { x: 480, y: 660 },
+  first: { x: 682, y: 500 },
+  second: { x: 480, y: 340 },
+  third: { x: 278, y: 500 },
+  mound: { x: 480, y: 500 },
+  plate: { x: 480, y: 652 },
+  catcher: { x: 480, y: 690 },
+  batter: { x: 535, y: 638 },
+  strike: { x: 480, y: 672, w: 198, h: 62 },
   fielders: {
-    p: { x: 480, y: 370 },
-    c: { x: 480, y: 522 },
-    "1B": { x: 654, y: 362 },
-    "2B": { x: 555, y: 307 },
-    "SS": { x: 405, y: 307 },
-    "3B": { x: 306, y: 362 },
-    LF: { x: 210, y: 170 },
-    CF: { x: 480, y: 102 },
-    RF: { x: 750, y: 170 },
+    p: { x: 480, y: 500 },
+    c: { x: 480, y: 690 },
+    "1B": { x: 704, y: 486 },
+    "2B": { x: 570, y: 410 },
+    "SS": { x: 390, y: 410 },
+    "3B": { x: 256, y: 486 },
+    LF: { x: 190, y: 220 },
+    CF: { x: 480, y: 132 },
+    RF: { x: 770, y: 220 },
   },
 };
 
@@ -1766,23 +1766,23 @@ function drawField() {
   // ── 3. OUTFIELD WALL ────────────────────────────────────────
   ctx.fillStyle = "#0b1a0d";
   ctx.beginPath();
-  ctx.moveTo(0, 74); ctx.lineTo(0, 100);
-  ctx.quadraticCurveTo(480, 128, 960, 100);
-  ctx.lineTo(960, 74); ctx.closePath();
+  ctx.moveTo(0, 82); ctx.lineTo(0, 118);
+  ctx.quadraticCurveTo(480, 154, 960, 118);
+  ctx.lineTo(960, 82); ctx.closePath();
   ctx.fill();
   // Wall padding stripe (bright yellow-green)
   ctx.strokeStyle = "#c8a020";
   ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(0, 97);
-  ctx.quadraticCurveTo(480, 125, 960, 97);
+  ctx.moveTo(0, 114);
+  ctx.quadraticCurveTo(480, 150, 960, 114);
   ctx.stroke();
   // Wall cap
   ctx.strokeStyle = "rgba(80,50,10,0.8)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(0, 102);
-  ctx.quadraticCurveTo(480, 130, 960, 102);
+  ctx.moveTo(0, 122);
+  ctx.quadraticCurveTo(480, 158, 960, 122);
   ctx.stroke();
 
   // ── 4. WARNING TRACK ────────────────────────────────────────
@@ -1790,21 +1790,21 @@ function drawField() {
   ctx.strokeStyle = "#9a6e36";
   ctx.lineWidth = 28;
   ctx.beginPath();
-  ctx.arc(FIELD.home.x, FIELD.home.y, 400, -2.36, -0.78);
+  ctx.arc(FIELD.home.x, FIELD.home.y, 540, -2.36, -0.78);
   ctx.stroke();
   ctx.strokeStyle = "rgba(160,115,55,0.45)";
   ctx.lineWidth = 14;
   ctx.beginPath();
-  ctx.arc(FIELD.home.x, FIELD.home.y, 387, -2.36, -0.78);
+  ctx.arc(FIELD.home.x, FIELD.home.y, 526, -2.36, -0.78);
   ctx.stroke();
   ctx.restore();
 
   // ── 5. TEAM WATERMARKS ──────────────────────────────────────
-  drawTeamWatermark(currentUserTeam(), 150, 158, 76);
-  if (game.aiTeam) drawTeamWatermark(game.aiTeam, 762, 158, 76);
+  drawTeamWatermark(currentUserTeam(), 150, 215, 78);
+  if (game.aiTeam) drawTeamWatermark(game.aiTeam, 762, 215, 78);
 
   // ── 6. INFIELD DIRT ─────────────────────────────────────────
-  const dirtG = ctx.createRadialGradient(FIELD.home.x, 360, 0, FIELD.home.x, 310, 245);
+  const dirtG = ctx.createRadialGradient(FIELD.mound.x, FIELD.mound.y - 10, 0, FIELD.second.x, FIELD.second.y + 42, 295);
   dirtG.addColorStop(0, "#cda060");
   dirtG.addColorStop(0.55, "#b88445");
   dirtG.addColorStop(1, "#9e7038");
@@ -3398,7 +3398,7 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     const defTotal = defense.fieldTime + throwTime;
     const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
     const hasForce = game.bases.first && game.outs < 2;
-    const infieldZone = landing.y > 238;
+    const infieldZone = landing.y > FIELD.second.y - 8;
     const doublePlayLane = hasForce && infieldZone && physics.exitVel < 132 && ["SS", "2B", "3B", "p"].includes(defense.fielder?.label);
     if (doublePlayLane && defTotal < batterRunTime - 0.58) result = "병살타";
     else result = "1루타";
@@ -3817,14 +3817,31 @@ function applyHitResult(result, options = {}) {
     if (!skipBall) startHitAnimation("파울", 160, "#f7f7f7");
     return;
   }
-  if (result === "땅볼아웃" || result === "플라이아웃" || result === "라인드라이브 아웃") {
-    const battedBall = skipBall ? game.hitBall : startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
-    if (result === "땅볼아웃") {
-      animateRunner(runner, "home", "first", true, runnerTravelTime(runner, "home", "first", true), { elapsed: currentBattedBallElapsed(battedBall) });
-      queueOutThrow(battedBall, "first", 0.12);
-    } else {
-      clearLiveRunnerAnimations();
+  if (result === "땅볼아웃") {
+    const battedBall = skipBall ? game.hitBall : startHitAnimation(result, 150, "#e6d0a5");
+    const play = advanceRunners(1, runner, battedBall, result);
+    recordRuns(play.runs);
+    if (!play.contestedBatterToFirst) {
+      recordBattingOutcome("1루타", play.runs);
     }
+    const text = play.contested
+      ? `땅볼 · ${play.outBaseLabel} 송구 중`
+      : (isOffense ? "내야안타!" : "내야안타 허용!");
+    if (play.contested) {
+      resetCount();
+      showResult(text, resultDurationWithThrow(1.35), () => {
+        nextBatter();
+        if (game.outs >= 3) switchHalfInning();
+        else resumeHalf();
+      });
+    } else {
+      finishPlateAppearance(text);
+    }
+    return;
+  }
+  if (result === "플라이아웃" || result === "라인드라이브 아웃") {
+    const battedBall = skipBall ? game.hitBall : startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
+    clearLiveRunnerAnimations();
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && canScoreOnSacFly(battedBall, game.bases.third)) {
       const thirdRunner = game.bases.third;
       game.bases.third = null;
@@ -3939,6 +3956,8 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
       resolved: false,
       runs: 0,
       result,
+      safeResult: result === "땅볼아웃" ? "1루타" : result,
+      outResult: result === "1루타" ? "땅볼아웃" : result,
       runsBeforeDecision: runs,
       batterFirst: contested.isBatter && contested.toBase === "first",
     };
@@ -3989,7 +4008,7 @@ function tickPendingTagPlay(deltaTime) {
 function applyTagOut(play) {
   game.outs = clamp(game.outs + 1, 0, 3);
   if (play.batterFirst) {
-    recordBattingOutcome("땅볼아웃", play.runsBeforeDecision || 0);
+    recordBattingOutcome(play.outResult || "땅볼아웃", play.runsBeforeDecision || 0);
   }
   const pitcherObj = battingPitcher();
   if (pitcherObj?.name) {
@@ -4014,7 +4033,7 @@ function applyTagSafe(play) {
     game.bases[play.toBase] = play.runner;
   }
   if (play.batterFirst) {
-    recordBattingOutcome(play.result || "1루타", play.runsBeforeDecision || 0);
+    recordBattingOutcome(play.safeResult || "1루타", play.runsBeforeDecision || 0);
   }
   game.pendingTagPlay = null;
   updateLiveTagCall(`${baseDisplayName(play.toBase)} 세이프!`);
@@ -4068,15 +4087,15 @@ function shouldTryExtraBase(runner, targetBase, battedBall, result) {
   if (targetBase === "third") {
     const runnerSpeedValue = runner?.speed || 60;
     const targetPoint = battedBall?.end || FIELD.second;
-    const isDeepSingle = targetPoint.y < 215 || Math.abs(targetPoint.x - FIELD.plate.x) > 285;
-    const isGapSingle = targetPoint.y < 245 && Math.abs(targetPoint.x - FIELD.plate.x) > 205;
+    const isDeepSingle = targetPoint.y < FIELD.second.y - 30 || Math.abs(targetPoint.x - FIELD.plate.x) > 285;
+    const isGapSingle = targetPoint.y < FIELD.second.y && Math.abs(targetPoint.x - FIELD.plate.x) > 205;
     if (!isDeepSingle && !isGapSingle) return false;
     return runnerSpeedValue >= (isDeepSingle ? 74 : 80);
   }
   const speed = runner?.speed || 60;
   const target = battedBall?.end || FIELD.second;
-  const deepBall = target.y < 235 || Math.abs(target.x - FIELD.plate.x) > 250;
-  const cleanGap = result === "2루타" || target.y < 210;
+  const deepBall = target.y < FIELD.second.y - 10 || Math.abs(target.x - FIELD.plate.x) > 250;
+  const cleanGap = result === "2루타" || target.y < FIELD.second.y - 34;
   if (targetBase === "home") return cleanGap || (deepBall && speed >= 58) || speed >= 82;
   return deepBall && speed >= 70;
 }
@@ -4108,7 +4127,7 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       };
     })
     .filter(({ plan, beatBy }) => {
-      if (plan.isBatter && result === "1루타") {
+      if (plan.isBatter && (result === "1루타" || result === "땅볼아웃")) {
         if (plan.toBase !== "first") return false;
         const fielderLabel = defense.fielder?.label || "";
         const infieldFielder = ["p", "1B", "2B", "SS", "3B"].includes(fielderLabel);
@@ -4116,7 +4135,8 @@ function chooseThrowOutPlan(plans, battedBall, result) {
         const physics = battedBall.physics || {};
         const infieldPlay = infieldFielder && fieldPoint.y > FIELD.second.y + 20 && Math.abs(fieldPoint.x - FIELD.plate.x) < 260;
         const slowOrGrounded = physics.isGroundBall || (physics.launchAngle || 0) < 8 || Math.hypot(physics.exitVel || 0, 0) < 112;
-        if (!infieldPlay || !slowOrGrounded) return false;
+        if (result === "1루타" && (!infieldPlay || !slowOrGrounded)) return false;
+        if (result === "땅볼아웃" && !infieldPlay) return false;
         return beatBy > 0.04;
       }
       // Runner only out when throw clearly beats them (favor runner on close plays).
@@ -4144,12 +4164,12 @@ function estimateDefenseTiming(battedBall, result) {
   }
   const target = battedBall.end || FIELD.second;
   const candidates =
-    target.y < 250 || result === "플라이아웃"
+    target.y < FIELD.second.y + 8 || result === "플라이아웃"
       ? game.fielders.filter((f) => ["LF", "CF", "RF", "SS", "2B"].includes(f.label))
       : game.fielders.filter((f) => ["1B", "2B", "SS", "3B", "p"].includes(f.label));
   const fielder = nearestFielderFromHome(candidates, target) || game.fielders[0];
   const fielderDistance = Math.hypot((fielder?.homeX || fielder?.x || FIELD.mound.x) - target.x, (fielder?.homeY || fielder?.y || FIELD.mound.y) - target.y);
-  const ballTime = (battedBall.duration || 1) * (target.y < 250 ? 0.96 : 0.76);
+  const ballTime = (battedBall.duration || 1) * (target.y < FIELD.second.y + 8 ? 0.96 : 0.76);
   const fielderTime = (battedBall.reactionDelay || 0.1) + fielderDistance / ((fielder?.speed || 170) * 0.72);
   return {
     fielder,
@@ -4741,7 +4761,7 @@ function chooseFieldingTarget(result, distance) {
 }
 
 function fairBoundsAtY(y) {
-  const topY = 118;
+  const topY = 138;
   const homeY = FIELD.home.y;
   const progress = clamp((homeY - y) / (homeY - topY), 0, 1);
   return {
@@ -4755,7 +4775,7 @@ function clampFairPoint(point) {
   const margin = 18;
   return {
     x: clamp(point.x, bounds.left + margin, bounds.right - margin),
-    y: clamp(point.y, 78, FIELD.home.y - 28),
+    y: clamp(point.y, 98, FIELD.home.y - 28),
   };
 }
 
