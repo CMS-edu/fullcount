@@ -2502,7 +2502,7 @@ function drawRunners() {
 }
 
 function isRunnerMovingToBase(runner, base) {
-  return game.runnerAnimations.some((animation) => animation.runner === runner && animation.toBase === base);
+  return game.runnerAnimations.some((animation) => animation.runner === runner && (animation.fromBase === base || animation.toBase === base));
 }
 
 function drawRunnerAnimations() {
@@ -3096,6 +3096,32 @@ function startPhysicsInPlay(physics, batter, runner) {
     pendingResolve: { physics, batter, runner },
     caughtInFlight: false,
   };
+  startLiveRunnersOnContact(runner);
+}
+
+function startLiveRunnersOnContact(batterRunner) {
+  clearLiveRunnerAnimations();
+  const starters = [
+    { runner: game.bases.third, fromBase: "third", toBase: "home", isBatter: false },
+    { runner: game.bases.second, fromBase: "second", toBase: "third", isBatter: false },
+    { runner: game.bases.first, fromBase: "first", toBase: "second", isBatter: false },
+    { runner: batterRunner, fromBase: "home", toBase: "first", isBatter: true },
+  ];
+  for (const item of starters) {
+    if (!item.runner) continue;
+    animateRunner(
+      item.runner,
+      item.fromBase,
+      item.toBase,
+      item.isBatter,
+      runnerTravelTime(item.runner, item.fromBase, item.toBase, item.isBatter),
+      { live: true, elapsed: 0 },
+    );
+  }
+}
+
+function clearLiveRunnerAnimations() {
+  game.runnerAnimations = game.runnerAnimations.filter((animation) => !animation.live);
 }
 
 function createBattedBallEngine(physics, batter) {
@@ -3771,6 +3797,7 @@ function applyHitResult(result, options = {}) {
   const label = isOffense ? result : result.includes("아웃") || result === "병살타" ? result : `${result} 허용`;
 
   if (result === "파울") {
+    clearLiveRunnerAnimations();
     addStrike("파울!", true);
     if (!skipBall) startHitAnimation("파울", 160, "#f7f7f7");
     return;
@@ -3778,8 +3805,10 @@ function applyHitResult(result, options = {}) {
   if (result === "땅볼아웃" || result === "플라이아웃" || result === "라인드라이브 아웃") {
     const battedBall = skipBall ? game.hitBall : startHitAnimation(result, result === "플라이아웃" ? 300 : 150, result === "플라이아웃" ? "#ffffff" : "#e6d0a5");
     if (result === "땅볼아웃") {
-      animateRunner(runner, "home", "first", true);
+      animateRunner(runner, "home", "first", true, runnerTravelTime(runner, "home", "first", true), { elapsed: currentBattedBallElapsed(battedBall) });
       queueOutThrow(battedBall, "first", 0.12);
+    } else {
+      clearLiveRunnerAnimations();
     }
     if (result === "플라이아웃" && game.bases.third && game.outs < 2 && canScoreOnSacFly(battedBall, game.bases.third)) {
       const thirdRunner = game.bases.third;
@@ -3797,8 +3826,9 @@ function applyHitResult(result, options = {}) {
   }
   if (result === "병살타") {
     const battedBall = skipBall ? game.hitBall : startHitAnimation("병살타", 140, "#e6d0a5");
-    if (game.bases.first) animateRunner(game.bases.first, "first", "second");
-    animateRunner(runner, "home", "first", true);
+    const playElapsed = currentBattedBallElapsed(battedBall);
+    if (game.bases.first) animateRunner(game.bases.first, "first", "second", false, runnerTravelTime(game.bases.first, "first", "second"), { elapsed: playElapsed });
+    animateRunner(runner, "home", "first", true, runnerTravelTime(runner, "home", "first", true), { elapsed: playElapsed });
     queueOutThrow(battedBall, "second", 0.08);
     if (game.bases.first) game.bases.first = null;
     recordBattingOutcome("병살타", 0);
@@ -3830,16 +3860,17 @@ function canScoreOnSacFly(battedBall, runner) {
 }
 
 function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall, result = "1루타") {
+  const playElapsed = currentBattedBallElapsed(battedBall);
   if (basesToAdvance >= 4) {
     let runs = 1;
     for (const key of ["first", "second", "third"]) {
       if (game.bases[key]) {
         runs += 1;
-        animateRunner(game.bases[key], key, "home");
+        animateRunner(game.bases[key], key, "home", false, runnerTravelTime(game.bases[key], key, "home"), { elapsed: playElapsed });
       }
       game.bases[key] = null;
     }
-    animateRunner(batterRunner, "home", "home", true);
+    animateRunner(batterRunner, "home", "home", true, runnerTravelTime(batterRunner, "home", "home", true), { elapsed: playElapsed });
     scoreRun(runs);
     return { runs, outs: 0, outBaseLabel: "" };
   }
@@ -3848,7 +3879,7 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
   const outPlan = chooseThrowOutPlan(plans, battedBall, result);
   if (outPlan) {
     if (outPlan.throwInfo) {
-      game.throwBall = { ...outPlan.throwInfo, timer: 0 };
+      game.throwBall = relativeThrowInfo(outPlan.throwInfo, playElapsed);
     }
   }
 
@@ -3860,7 +3891,7 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
   let runs = 0;
   const contested = outPlan || null;
   for (const plan of plans) {
-    animateRunner(plan.runner, plan.fromBase, plan.toBase, plan.isBatter, plan.runnerTime);
+    animateRunner(plan.runner, plan.fromBase, plan.toBase, plan.isBatter, plan.runnerTime, { elapsed: playElapsed });
     if (plan === contested) continue; // defer placement / out decision
     if (plan.toNo >= 4) runs += 1;
     else next[plan.toBase] = plan.runner;
@@ -3875,8 +3906,8 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
       runner: contested.runner,
       toBase: contested.toBase,
       toNo: contested.toNo,
-      runnerArrivalAt: contested.runnerTime,
-      throwArrivalAt: contested.throwInfo ? contested.throwInfo.delay + contested.throwInfo.duration : Infinity,
+      runnerArrivalAt: Math.max(0, contested.runnerTime - playElapsed),
+      throwArrivalAt: contested.throwInfo ? Math.max(0, contested.throwInfo.delay + contested.throwInfo.duration - playElapsed) : Infinity,
       elapsed: 0,
       resolved: false,
       runs: 0,
@@ -3888,6 +3919,20 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
     outs: 0, // contested out (if any) is applied later by tickPendingTagPlay
     outBaseLabel: contested ? baseDisplayName(contested.toBase) : "",
     contested: Boolean(contested),
+  };
+}
+
+function currentBattedBallElapsed(battedBall = game.hitBall) {
+  if (!battedBall) return 0;
+  if (battedBall.engine) return battedBall.engine.time || 0;
+  return (battedBall.t || 0) * (battedBall.duration || 0);
+}
+
+function relativeThrowInfo(throwInfo, playElapsed) {
+  return {
+    ...throwInfo,
+    delay: Math.max(0, (throwInfo.delay || 0) - playElapsed),
+    timer: 0,
   };
 }
 
@@ -4014,13 +4059,15 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       };
     })
     .filter(({ plan, beatBy }) => {
-      if (plan.isBatter) return false;
+      if (plan.isBatter && result === "1루타") return false;
       // Runner only out when throw clearly beats them (favor runner on close plays).
       // home plate: require throw to win by ≥ 0.4s (real-life "throw 2 steps ahead")
       // other bases: ≥ 0.32s
       if (plan.toNo >= 4) return beatBy > 0.40;
-      if (plan.toNo - plan.fromNo <= (result === "2루타" ? 2 : 1)) return false;
-      return beatBy > 0.32;
+      const expectedAdvance = result === "3루타" ? 3 : result === "2루타" ? 2 : 1;
+      const isExpectedBase = plan.toNo - plan.fromNo <= expectedAdvance;
+      const requiredBeat = isExpectedBase ? 0.18 : 0.32;
+      return beatBy > requiredBeat;
     })
     .sort((a, b) => b.value - a.value || b.beatBy - a.beatBy);
   if (!throwCandidates[0]) return null;
@@ -4057,10 +4104,11 @@ function queueOutThrow(battedBall, toBase, extraDelay = 0) {
   const defense = estimateDefenseTiming(battedBall, battedBall.result);
   const to = getRunnerBasePoint(toBase);
   const distance = Math.hypot(to.x - defense.fieldPoint.x, to.y - defense.fieldPoint.y);
+  const playElapsed = currentBattedBallElapsed(battedBall);
   game.throwBall = {
     from: { ...defense.fieldPoint },
     to,
-    delay: defense.fieldTime + extraDelay,
+    delay: Math.max(0, defense.fieldTime + extraDelay - playElapsed),
     duration: Math.max(0.38, distance / 520 + 0.13),
     timer: 0,
   };
@@ -4440,7 +4488,7 @@ function scoreRun(count) {
   else game.aiScore += count;
 }
 
-function animateRunner(runner, fromBase, toBase, isBatter = false, forceDuration = null) {
+function animateRunner(runner, fromBase, toBase, isBatter = false, forceDuration = null, options = {}) {
   if (!runner) return;
   const path = buildBasePath(fromBase, toBase);
   const from = path[0] || getRunnerBasePoint(fromBase);
@@ -4454,7 +4502,9 @@ function animateRunner(runner, fromBase, toBase, isBatter = false, forceDuration
   const turns = Math.max(0, path.length - 2);
   const computed = dist / runnerSpeed + turns * 0.18 + (isBatter ? 0.18 : 0.04);
   const duration = forceDuration ?? computed;
-  game.runnerAnimations.push({
+  const safeDuration = Math.max(0.6, duration);
+  const elapsed = clamp(options.elapsed || 0, 0, safeDuration);
+  const nextAnimation = {
     runner,
     from,
     to,
@@ -4462,9 +4512,13 @@ function animateRunner(runner, fromBase, toBase, isBatter = false, forceDuration
     totalDistance: dist,
     fromBase,
     toBase,
-    t: 0,
-    duration: Math.max(0.6, duration),
-  });
+    t: clamp(elapsed / safeDuration, 0, 1),
+    duration: safeDuration,
+    live: options.live === true,
+  };
+  const existingIndex = game.runnerAnimations.findIndex((animation) => animation.runner === runner);
+  if (existingIndex >= 0) game.runnerAnimations[existingIndex] = nextAnimation;
+  else game.runnerAnimations.push(nextAnimation);
 }
 
 function buildBasePath(fromBase, toBase) {
@@ -5691,6 +5745,13 @@ window.render_game_to_text = () =>
       second: game.bases.second?.name || null,
       third: game.bases.third?.name || null,
     },
+    runnersMoving: game.runnerAnimations.map((animation) => ({
+      name: animation.runner?.name || null,
+      from: animation.fromBase,
+      to: animation.toBase,
+      t: Number(animation.t.toFixed(2)),
+      live: animation.live === true,
+    })),
     batter: game.currentBatter?.name || null,
     pitcher: (game.half === "top" ? game.aiPitcher : game.currentPitcher)?.name || null,
     pitch: game.ball.active
