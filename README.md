@@ -74,6 +74,17 @@ Render Web Service 환경변수:
 - `NODE_ENV`: `production`
 - `CORS_ORIGIN`: Vercel 프론트 주소를 따로 쓸 때만 설정
 
+PostgreSQL을 새로 만들 때:
+
+1. Render Dashboard에서 `New +` → `PostgreSQL`을 누릅니다.
+2. Name은 예를 들어 `fullcount-db`, Region은 Web Service와 같은 곳으로 둡니다.
+3. DB가 만들어지면 PostgreSQL 상세 화면에서 `Internal Database URL`을 복사합니다.
+4. Web Service `fullcount` → `Environment`에 `DATABASE_URL` 값을 그 URL로 넣습니다.
+5. `SESSION_SECRET`은 아무 긴 랜덤 문자열로 직접 넣거나, Blueprint가 생성한 값을 그대로 둡니다.
+6. 저장 후 Web Service를 `Manual Deploy` → `Deploy latest commit`으로 다시 배포합니다.
+
+주의: Render에서 백엔드와 DB가 같은 계정/리전 안에 있으면 `DATABASE_URL`은 보통 `Internal Database URL`을 씁니다. 로컬 PC에서 직접 DB에 붙을 때만 `External Database URL`을 씁니다. DB URL은 비밀번호가 포함되어 있으니 GitHub에 커밋하지 마세요.
+
 현재처럼 Render 하나로 접속하면 `config.js`는 아래처럼 비워두면 됩니다.
 
 ```js

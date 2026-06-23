@@ -9,24 +9,24 @@ const TWO_PI = Math.PI * 2;
 
 const FIELD = {
   home: { x: 480, y: 500 },
-  first: { x: 694, y: 336 },
-  second: { x: 480, y: 172 },
-  third: { x: 266, y: 336 },
-  mound: { x: 480, y: 326 },
+  first: { x: 638, y: 372 },
+  second: { x: 480, y: 245 },
+  third: { x: 322, y: 372 },
+  mound: { x: 480, y: 370 },
   plate: { x: 480, y: 492 },
   catcher: { x: 480, y: 522 },
   batter: { x: 535, y: 478 },
   strike: { x: 480, y: 512, w: 190, h: 62 },
   fielders: {
-    p: { x: 480, y: 326 },
+    p: { x: 480, y: 370 },
     c: { x: 480, y: 522 },
-    "1B": { x: 704, y: 326 },
-    "2B": { x: 564, y: 250 },
-    "SS": { x: 396, y: 250 },
-    "3B": { x: 256, y: 326 },
-    LF: { x: 188, y: 170 },
-    CF: { x: 480, y: 128 },
-    RF: { x: 772, y: 170 },
+    "1B": { x: 654, y: 362 },
+    "2B": { x: 555, y: 307 },
+    "SS": { x: 405, y: 307 },
+    "3B": { x: 306, y: 362 },
+    LF: { x: 210, y: 170 },
+    CF: { x: 480, y: 102 },
+    RF: { x: 750, y: 170 },
   },
 };
 
@@ -38,7 +38,7 @@ const BALL_ENGINE = {
   catchHeight: 58,
   gloveRadiusAir: 18,
   gloveRadiusGround: 20,
-  fenceY: 58,
+  fenceY: 96,
   maxLiveTime: 4.6,
 };
 
@@ -249,6 +249,7 @@ const game = {
   ball: makeBall(),
   hitBall: null,
   throwBall: null,
+  pendingTagPlay: null,
   fielders: [],
   bat: { angle: -0.6, neutral: -0.6, held: false, contacted: false, attempted: false, spin: 0 },
   aiBat: { neutral: -0.78, angle: -0.78, timer: 0, duration: 0.34 },
@@ -805,6 +806,7 @@ function resetGame(toIntro = true) {
   game.ball = makeBall();
   game.hitBall = null;
   game.throwBall = null;
+  game.pendingTagPlay = null;
   game.fielders = createFielders();
   game.bat = { angle: -0.6, neutral: -0.6, held: false, contacted: false, attempted: false, spin: 0 };
   game.aiBat = { neutral: -0.78, angle: -0.78, timer: 0, duration: 0.34 };
@@ -1550,10 +1552,7 @@ function checkLiveAirCatch() {
   const heightOk = engine.z <= BALL_ENGINE.catchHeight || game.hitBall.physics?.isLineDrive;
   const range = game.hitBall.physics?.isPopup ? 24 : game.hitBall.physics?.isLineDrive ? 13 : BALL_ENGINE.gloveRadiusAir;
   if (heightOk && dist <= range) {
-    engine.fieldedAt = { x: engine.x, y: engine.y };
-    engine.fieldedAtTime = engine.time;
-    engine.fieldedBy = closest;
-    closest.hasBall = true;
+    freezeLiveBallInGlove(engine, closest, true);
     resolvePendingPlay({ caughtInFlight: true, fielder: closest });
   }
 }
@@ -1570,13 +1569,27 @@ function checkLiveGroundFielding() {
   const dist = Math.hypot(closest.x - engine.x, closest.y - engine.y);
   const range = ballSpeed > 300 ? 12 : BALL_ENGINE.gloveRadiusGround;
   if (dist <= range || engine.settled) {
-    engine.fieldedAt = { x: engine.x, y: engine.y };
-    engine.fieldedAtTime = engine.time;
-    engine.fieldedBy = closest;
-    closest.hasBall = true;
-    engine.settled = true;
+    freezeLiveBallInGlove(engine, closest, false);
     resolvePendingPlay({ caughtInFlight: false, fielder: closest, groundFielded: true });
   }
+}
+
+function freezeLiveBallInGlove(engine, fielder, airborneCatch) {
+  if (!engine || !fielder) return;
+  engine.x = fielder.x;
+  engine.y = fielder.y;
+  engine.z = airborneCatch ? Math.min(engine.z || BALL_ENGINE.catchHeight, BALL_ENGINE.catchHeight) : 0;
+  engine.vx = 0;
+  engine.vy = 0;
+  engine.vz = 0;
+  engine.state = "fielded";
+  engine.settled = true;
+  engine.fieldedAt = { x: fielder.x, y: fielder.y };
+  engine.fieldedAtTime = engine.time;
+  engine.fieldedBy = fielder;
+  engine.settlePoint = { x: fielder.x, y: fielder.y };
+  fielder.hasBall = true;
+  pushLiveBallTrail(engine);
 }
 
 function updateThrowBall(deltaTime) {
@@ -2705,6 +2718,7 @@ function drawHitBall() {
 
 function drawLiveHitBall(hitBall) {
   const engine = hitBall.engine;
+  if (engine.state === "fielded" && game.throwBall && game.throwBall.timer >= game.throwBall.delay) return;
   const trail = engine.trail || [];
   const screen = liveBallScreenPoint(engine);
   ctx.save();
@@ -3350,6 +3364,8 @@ function checkInFlightCatch() {
   const range = physics.isPopup ? 24 : physics.isFlyBall ? 14 : 10;
   if (dist < range) {
     game.hitBall.caughtInFlight = true;
+    game.hitBall.t = 1;
+    game.hitBall.end = { x: closest.x, y: closest.y };
     closest.hasBall = true;
     resolvePendingPlay({ caughtInFlight: true, fielder: closest });
   }
@@ -3383,10 +3399,8 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
     const hasForce = game.bases.first && game.outs < 2;
     const infieldZone = landing.y > 238;
-    const hardThroughInfield = !infieldZone || physics.exitVel > 148 || Math.abs(landing.x - FIELD.plate.x) > 215;
     const doublePlayLane = hasForce && infieldZone && physics.exitVel < 132 && ["SS", "2B", "3B", "p"].includes(defense.fielder?.label);
     if (doublePlayLane && defTotal < batterRunTime - 0.58) result = "병살타";
-    else if (!hardThroughInfield && defTotal < batterRunTime - 0.12) result = "땅볼아웃";
     else result = "1루타";
   } else {
     const landing = engine?.firstTouch || engine?.fieldedAt || game.hitBall.end;
@@ -3399,6 +3413,7 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     else result = "1루타";
   }
 
+  game.hitBall.result = result;
   applyHitResult(result, { skipBall: true, runner });
 }
 
@@ -3839,13 +3854,25 @@ function applyHitResult(result, options = {}) {
   const battedBall = skipBall ? game.hitBall : startHitAnimation(result, bases === 4 ? 520 : 190 + bases * 80, bases === 4 ? "#ffd34d" : "#fff");
   const play = advanceRunners(bases, runner, battedBall, result);
   recordRuns(play.runs);
-  recordBattingOutcome(result, play.runs);
+  if (!play.contestedBatterToFirst) {
+    recordBattingOutcome(result, play.runs);
+  }
   // For contested plays the safe/out is decided later by tickPendingTagPlay,
   // so the immediate text just signals a throw is incoming.
+  const displayLabel = play.contestedBatterToFirst ? (isOffense ? "1루 승부" : "1루 승부") : label;
   const suffix = play.contested
     ? ` · ${play.outBaseLabel} 송구 중`
     : play.outs ? ` · ${play.outBaseLabel} 송구 아웃!` : "!";
-  finishPlateAppearance(`${label}${suffix}`);
+  if (play.contested) {
+    resetCount();
+    showResult(`${displayLabel}${suffix}`, resultDurationWithThrow(1.35), () => {
+      nextBatter();
+      if (game.outs >= 3) switchHalfInning();
+      else resumeHalf();
+    });
+  } else {
+    finishPlateAppearance(`${displayLabel}${suffix}`);
+  }
 }
 
 function canScoreOnSacFly(battedBall, runner) {
@@ -3911,6 +3938,9 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
       elapsed: 0,
       resolved: false,
       runs: 0,
+      result,
+      runsBeforeDecision: runs,
+      batterFirst: contested.isBatter && contested.toBase === "first",
     };
   }
 
@@ -3919,6 +3949,7 @@ function advanceRunners(basesToAdvance, batterRunner, battedBall = game.hitBall,
     outs: 0, // contested out (if any) is applied later by tickPendingTagPlay
     outBaseLabel: contested ? baseDisplayName(contested.toBase) : "",
     contested: Boolean(contested),
+    contestedBatterToFirst: Boolean(contested && contested.isBatter && contested.toBase === "first"),
   };
 }
 
@@ -3957,15 +3988,19 @@ function tickPendingTagPlay(deltaTime) {
 
 function applyTagOut(play) {
   game.outs = clamp(game.outs + 1, 0, 3);
+  if (play.batterFirst) {
+    recordBattingOutcome("땅볼아웃", play.runsBeforeDecision || 0);
+  }
   const pitcherObj = battingPitcher();
   if (pitcherObj?.name) {
     const ps = ensurePitcherStat(pitcherObj.name, defenseTeamName());
     ps.outs = (ps.outs || 0) + 1;
   }
   game.pendingTagPlay = null;
+  updateLiveTagCall(`${baseDisplayName(play.toBase)} 송구 아웃!`);
   // If this tag completes the half-inning, switch right away. Otherwise the
   // current showResult timeout will handle the natural transition.
-  if (game.outs >= 3 && game.state === "result") {
+  if (game.outs >= 3 && game.state !== "result") {
     switchHalfInning();
   }
 }
@@ -3978,7 +4013,21 @@ function applyTagSafe(play) {
   } else if (!game.bases[play.toBase]) {
     game.bases[play.toBase] = play.runner;
   }
+  if (play.batterFirst) {
+    recordBattingOutcome(play.result || "1루타", play.runsBeforeDecision || 0);
+  }
   game.pendingTagPlay = null;
+  updateLiveTagCall(`${baseDisplayName(play.toBase)} 세이프!`);
+}
+
+function updateLiveTagCall(text) {
+  if (!text) return;
+  game.resultText = text;
+  game.playPhase = text;
+  game.resultTimer = Math.max(game.resultTimer || 0, 0.85);
+  game.resultDuration = Math.max(game.resultDuration || 0, game.resultTimer);
+  broadcastOnlineSnapshot("tagPlay");
+  renderUI(true);
 }
 
 function buildRunnerAdvancePlans(basesToAdvance, batterRunner, battedBall, result) {
@@ -4059,7 +4108,17 @@ function chooseThrowOutPlan(plans, battedBall, result) {
       };
     })
     .filter(({ plan, beatBy }) => {
-      if (plan.isBatter && result === "1루타") return false;
+      if (plan.isBatter && result === "1루타") {
+        if (plan.toBase !== "first") return false;
+        const fielderLabel = defense.fielder?.label || "";
+        const infieldFielder = ["p", "1B", "2B", "SS", "3B"].includes(fielderLabel);
+        const fieldPoint = defense.fieldPoint || battedBall.end || FIELD.first;
+        const physics = battedBall.physics || {};
+        const infieldPlay = infieldFielder && fieldPoint.y > FIELD.second.y + 20 && Math.abs(fieldPoint.x - FIELD.plate.x) < 260;
+        const slowOrGrounded = physics.isGroundBall || (physics.launchAngle || 0) < 8 || Math.hypot(physics.exitVel || 0, 0) < 112;
+        if (!infieldPlay || !slowOrGrounded) return false;
+        return beatBy > 0.04;
+      }
       // Runner only out when throw clearly beats them (favor runner on close plays).
       // home plate: require throw to win by ≥ 0.4s (real-life "throw 2 steps ahead")
       // other bases: ≥ 0.32s
@@ -4234,6 +4293,7 @@ function switchHalfInning(forceBottom = false) {
   game.bases = { first: null, second: null, third: null };
   game.runnerAnimations = [];
   game.throwBall = null;
+  game.pendingTagPlay = null;
   if (forceBottom || game.half === "top") {
     game.half = "bottom";
     game.state = "inningChange";
@@ -5752,6 +5812,16 @@ window.render_game_to_text = () =>
       t: Number(animation.t.toFixed(2)),
       live: animation.live === true,
     })),
+    tagPlay: game.pendingTagPlay
+      ? {
+          runner: game.pendingTagPlay.runner?.name || null,
+          to: game.pendingTagPlay.toBase,
+          runnerArrivalAt: Number(game.pendingTagPlay.runnerArrivalAt.toFixed(2)),
+          throwArrivalAt: Number(game.pendingTagPlay.throwArrivalAt.toFixed(2)),
+          elapsed: Number(game.pendingTagPlay.elapsed.toFixed(2)),
+          batterFirst: game.pendingTagPlay.batterFirst === true,
+        }
+      : null,
     batter: game.currentBatter?.name || null,
     pitcher: (game.half === "top" ? game.aiPitcher : game.currentPitcher)?.name || null,
     pitch: game.ball.active
