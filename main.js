@@ -36,8 +36,8 @@ const BALL_ENGINE = {
   groundDrag: 2.25,
   sideSpinScale: 18,
   catchHeight: 58,
-  gloveRadiusAir: 18,
-  gloveRadiusGround: 20,
+  gloveRadiusAir: 23,
+  gloveRadiusGround: 26,
   fenceY: 96,
   maxLiveTime: 4.6,
 };
@@ -1551,7 +1551,7 @@ function checkLiveAirCatch() {
   const glove = fielderGlovePoint(closest);
   const dist = Math.hypot(glove.x - engine.x, glove.y - engine.y);
   const heightOk = engine.z <= BALL_ENGINE.catchHeight || game.hitBall.physics?.isLineDrive;
-  const range = game.hitBall.physics?.isPopup ? 24 : game.hitBall.physics?.isLineDrive ? 13 : BALL_ENGINE.gloveRadiusAir;
+  const range = game.hitBall.physics?.isPopup ? 32 : game.hitBall.physics?.isLineDrive ? 20 : BALL_ENGINE.gloveRadiusAir;
   if (heightOk && dist <= range) {
     freezeLiveBallInGlove(engine, closest, true);
     resolvePendingPlay({ caughtInFlight: true, fielder: closest });
@@ -1569,7 +1569,7 @@ function checkLiveGroundFielding() {
   const ballSpeed = Math.hypot(engine.vx, engine.vy);
   const glove = fielderGlovePoint(closest);
   const dist = Math.hypot(glove.x - engine.x, glove.y - engine.y);
-  const range = ballSpeed > 300 ? 12 : BALL_ENGINE.gloveRadiusGround;
+  const range = ballSpeed > 360 ? 16 : ballSpeed > 250 ? 22 : BALL_ENGINE.gloveRadiusGround;
   if (dist <= range || engine.settled) {
     freezeLiveBallInGlove(engine, closest, false);
     resolvePendingPlay({ caughtInFlight: false, fielder: closest, groundFielded: true });
@@ -3394,8 +3394,8 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     const batterRunTime = runnerTravelTime({ speed }, "home", "first", true);
     const hasForce = game.bases.first && game.outs < 2;
     const infieldZone = landing.y > FIELD.second.y - 8;
-    const hardThroughInfield = !engine?.fieldedAt && (!infieldZone || physics.exitVel > 148 || Math.abs(landing.x - FIELD.plate.x) > 215);
-    const doublePlayLane = hasForce && infieldZone && physics.exitVel < 132 && ["SS", "2B", "3B", "p"].includes(defense.fielder?.label);
+    const hardThroughInfield = !engine?.fieldedAt && (!infieldZone || physics.exitVel > 166 || Math.abs(landing.x - FIELD.plate.x) > 255);
+    const doublePlayLane = hasForce && infieldZone && physics.exitVel < 146 && ["SS", "2B", "3B", "p"].includes(defense.fielder?.label);
     if (hardThroughInfield) result = "1루타";
     else result = doublePlayLane ? "병살타" : "땅볼아웃";
   } else {
@@ -3404,7 +3404,19 @@ function resolvePendingPlay({ caughtInFlight = false, fielder = null, homeRun = 
     const gap = Math.abs(landing.x - FIELD.plate.x);
     const deep = landing.y < 210 || physics.carry > 340;
     const wallGap = landing.y < 150 || (physics.carry > 430 && gap > 170);
-    if (wallGap && speed >= 78) result = "3루타";
+    const defense = estimatePhysicsFielding(physics, landing);
+    const landingTime = engine?.firstTouch?.time || physics.hangTime || game.hitBall.duration || 1;
+    const routineAirOut =
+      (physics.isPopup || physics.isFlyBall || physics.isLineDrive)
+      && !wallGap
+      && defense.fieldTime <= landingTime + (physics.isPopup ? 0.36 : physics.isFlyBall ? 0.22 : 0.08)
+      && !(physics.isLineDrive && physics.exitVel > 142 && defense.distance > 70);
+    if (routineAirOut) {
+      const glove = fielderGlovePoint({ ...defense.fielder, x: landing.x - fielderGloveOffset(defense.fielder).x, y: landing.y - fielderGloveOffset(defense.fielder).y });
+      if (engine) freezeLiveBallInGlove(engine, defense.fielder, true);
+      game.hitBall.end = glove;
+      result = physics.isLineDrive ? "라인드라이브 아웃" : "플라이아웃";
+    } else if (wallGap && speed >= 78) result = "3루타";
     else if (deep || gap > 230) result = "2루타";
     else result = "1루타";
   }
@@ -3458,9 +3470,11 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const along = Number.isFinite(contact.along) ? contact.along : 0.62;
   const baseQuality = Number.isFinite(contact.quality) ? contact.quality : 0.5;
   const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
-  const totalQuality = baseQuality * 0.55 + sweetSpot * 0.45;
   const timing = ball.t - 0.84; // negative = early swing, positive = late
   const timingAbs = Math.abs(timing);
+  const timingQuality = clamp(1 - timingAbs / 0.24, 0, 1);
+  const totalQuality = clamp(baseQuality * 0.46 + sweetSpot * 0.32 + timingQuality * 0.22, 0, 1);
+  const mishitPenalty = clamp((1 - totalQuality) * 34 + timingAbs * 92, 0, 58);
 
   if (totalQuality < 0.06 && timingAbs > 0.42) {
     return { swingMiss: true, totalQuality };
@@ -3476,19 +3490,22 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const pitchDifficulty = (ball.speed || 140) * 0.18 + Math.abs(ball.movement?.x || 0) * 0.22 + (activePitcher?.breaking || 60) * 0.14;
   const power = batter.power || 60;
   const launchTrait = batter.launch || 60;
+  const inningRuns = game.inningRuns?.[game.half]?.[game.inning - 1] || 0;
+  const rallyPenalty = Math.max(0, inningRuns - 2);
 
   // Exit velocity (canvas-pixel "speed" units). Real range ~ 60-180.
   const exitVel = clamp(
-    power * 0.95 + (game.swingPower || 50) * 0.60 + totalQuality * 120 - pitchDifficulty * 0.15 - timingAbs * 170 + physicsNoise(batter, ball, along, 1) * 10,
-    55, 230
-  );
+    power * 0.82 + (game.swingPower || 50) * 0.46 + totalQuality * 108 - pitchDifficulty * 0.18 - timingAbs * 190 - mishitPenalty + physicsNoise(batter, ball, along, 1) * 12,
+    44, 214
+  ) - rallyPenalty * 8;
+  const adjustedExitVel = clamp(exitVel, 40, 214);
 
   // Launch angle from bat angle ≈ contact location on barrel.
   //   along < 0.50 → topspin grounder (negative angle)
   //   along ~ 0.72 → sweet spot, slight uppercut (~18-28°)
   //   along > 0.88 → popup (40°+)
   const launchDeg = clamp(
-    (along - 0.50) * 100 + launchTrait * 0.18 - 8 + (sweetSpot > 0.72 ? 6 : 0) + physicsNoise(batter, ball, along, 2) * 7,
+    (along - 0.50) * 108 + launchTrait * 0.16 - 10 + (sweetSpot > 0.78 && timingQuality > 0.62 ? 5 : 0) - (totalQuality < 0.38 ? 7 : 0) + physicsNoise(batter, ball, along, 2) * 10,
     -28, 75
   );
 
@@ -3504,29 +3521,30 @@ function computeBattedBallPhysics({ contact, batter, ball }) {
   const sprayRad = sprayDeg * Math.PI / 180;
   let carry;
   if (launchDeg < 4) {
-    carry = exitVel * 1.65 + 80; // line-drives roll/skip
+    carry = adjustedExitVel * 1.42 + 56; // line-drives roll/skip, weak grounders stay playable
   } else {
-    carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 58 + 80;
+    carry = (adjustedExitVel * adjustedExitVel * Math.sin(2 * launchRad)) / 68 + 62;
   }
+  carry -= rallyPenalty * 28;
   carry = clamp(carry, 80, 640);
 
   const hangTime = launchDeg > 5
-    ? clamp(0.5 + (exitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
+    ? clamp(0.5 + (adjustedExitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
     : 0.42;
 
   const landingX = FIELD.plate.x + carry * Math.sin(sprayRad);
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 20 && carry > 400 && landingY < 120;
+  const isHR = fair && launchDeg > 20 && adjustedExitVel > 142 && carry > 410 && landingY < 120;
 
   const isPopup = launchDeg > 52;
-  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
-  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
+  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && adjustedExitVel > 80;
+  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && adjustedExitVel > 55;
   const isGroundBall = launchDeg <= 2;
 
   return {
-    totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
+    totalQuality, exitVel: adjustedExitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
     carry, hangTime, landingX, landingY,
     fair, foul: !fair, isHR,
     isFlyBall, isLineDrive, isGroundBall, isPopup,
@@ -3543,12 +3561,14 @@ function isInFairTerritory(x, y) {
 function resolveBuntResult(physics, batter) {
   const speed = batter.speed || 60;
   const buntSkill = batter.bunt || 55;
+  const inningRuns = game.inningRuns?.[game.half]?.[game.inning - 1] || 0;
   const deadenQuality = clamp(
-    buntSkill * 0.68 +
-      speed * 0.18 +
-      physics.totalQuality * 26 -
-      Math.abs(physics.sprayAngle) * 0.22 -
-      Math.max(0, physics.exitVel - 72) * 0.36,
+    buntSkill * 0.54 +
+      speed * 0.10 +
+      physics.totalQuality * 18 -
+      Math.abs(physics.sprayAngle) * 0.34 -
+      Math.max(0, physics.exitVel - 58) * 0.58 -
+      inningRuns * 4,
     10,
     100,
   );
@@ -3562,12 +3582,12 @@ function resolveBuntResult(physics, batter) {
     landing,
   );
   const throwDistance = Math.hypot(FIELD.first.x - landing.x, FIELD.first.y - landing.y);
-  const defenseTime = 0.16 + defense.distance / ((defense.fielder?.speed || 170) * 0.94) + throwDistance / infieldThrowSpeed(defense.fielder) + 0.2;
-  const batterTime = runnerTravelTime({ speed }, "home", "first", true);
+  const defenseTime = 0.1 + defense.distance / ((defense.fielder?.speed || 170) * 1.12) + throwDistance / (infieldThrowSpeed(defense.fielder) * 1.08) + 0.14;
+  const batterTime = runnerTravelTime({ speed: Math.max(35, speed - 8) }, "home", "first", true) + 0.1;
   const forceAtSecond = game.bases.first && game.outs < 2;
 
-  if (forceAtSecond && defenseTime < batterTime - 0.48 && deadenQuality < 66) return "병살타";
-  if (batterTime + 0.1 < defenseTime && deadenQuality >= 62) return "번트안타";
+  if (forceAtSecond && defenseTime < batterTime + 0.12 && deadenQuality < 82) return "병살타";
+  if (!forceAtSecond && game.outs < 2 && speed >= 82 && buntSkill >= 72 && deadenQuality >= 86 && batterTime + 0.28 < defenseTime) return "번트안타";
   return "땅볼아웃";
 }
 
@@ -3733,24 +3753,27 @@ function resolvePitchingResult(aiSwung) {
 // AI side has no manual bat swing → synthesize along/timing from contactScore
 // + timingDiff and run the same physics + landing+fielder outcome logic.
 function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, timingDiff, fatigue }) {
-  const qualityRaw = clamp((contactScore - 20) / 65, 0, 1);
+  const qualityRaw = clamp((contactScore - 28) / 72, 0, 1);
+  const inningRuns = game.inningRuns?.[game.half]?.[game.inning - 1] || 0;
+  const rallyPenalty = Math.max(0, inningRuns - 2);
   // Synthesize how close to sweet spot the AI's bat would have been.
-  // Pushed slightly toward the sweet spot — we want a hitter-friendly game.
-  const along = clamp(0.52 + qualityRaw * 0.28 + physicsNoise(batter, ball, 0.58, 4) * 0.13, 0.18, 0.95);
+  const along = clamp(0.50 + qualityRaw * 0.25 + physicsNoise(batter, ball, 0.58, 4) * 0.18, 0.16, 0.97);
   const sweetSpot = clamp(1 - Math.abs(along - 0.72) / 0.5, 0, 1);
-  const totalQuality = qualityRaw * 0.55 + sweetSpot * 0.45;
+  const timingQuality = clamp(1 - timingDiff / 48, 0, 1);
+  const totalQuality = clamp(qualityRaw * 0.48 + sweetSpot * 0.28 + timingQuality * 0.24, 0, 1);
 
   // Bad timing → foul/off-balance flag handled by physics
   const timingBias = physicsNoise(batter, ball, along, 5) >= 0 ? 1 : -1;
   const timing = timingBias * timingDiff / 100;
 
   const exitVel = clamp(
-    powerScore * 0.82 + totalQuality * 110 - timingDiff * 0.44 + physicsNoise(batter, ball, along, 6) * 10,
-    52, 210
-  );
+    powerScore * 0.72 + totalQuality * 98 - timingDiff * 0.58 + physicsNoise(batter, ball, along, 6) * 12,
+    42, 196
+  ) - rallyPenalty * 8;
+  const adjustedExitVel = clamp(exitVel, 38, 196);
 
   const launchDeg = clamp(
-    (along - 0.50) * 100 + (batter.launch || 60) * 0.18 - 8 + physicsNoise(batter, ball, along, 7) * 7,
+    (along - 0.50) * 108 + (batter.launch || 60) * 0.16 - 11 - (totalQuality < 0.4 ? 6 : 0) + physicsNoise(batter, ball, along, 7) * 10,
     -28, 75
   );
 
@@ -3763,26 +3786,27 @@ function computeAIBattedBallPhysics({ batter, ball, contactScore, powerScore, ti
   const launchRad = launchDeg * Math.PI / 180;
   const sprayRad = sprayDeg * Math.PI / 180;
   let carry;
-  if (launchDeg < 4) carry = exitVel * 1.65 + 80;
-  else carry = (exitVel * exitVel * Math.sin(2 * launchRad)) / 78 + 70;
+  if (launchDeg < 4) carry = adjustedExitVel * 1.42 + 56;
+  else carry = (adjustedExitVel * adjustedExitVel * Math.sin(2 * launchRad)) / 88 + 58;
+  carry -= rallyPenalty * 28;
   carry = clamp(carry, 80, 640);
 
   const hangTime = launchDeg > 5
-    ? clamp(0.5 + (exitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
+    ? clamp(0.5 + (adjustedExitVel * Math.sin(launchRad)) / 75, 0.55, 2.6)
     : 0.42;
 
   const landingX = FIELD.plate.x + carry * Math.sin(sprayRad);
   const landingY = FIELD.plate.y - carry * Math.cos(sprayRad);
 
   const fair = isInFairTerritory(landingX, landingY);
-  const isHR = fair && launchDeg > 20 && carry > 400 && landingY < 120;
+  const isHR = fair && launchDeg > 20 && adjustedExitVel > 140 && carry > 410 && landingY < 120;
   const isPopup = launchDeg > 52;
-  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && exitVel > 80;
-  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && exitVel > 55;
+  const isFlyBall = launchDeg > 22 && launchDeg <= 52 && adjustedExitVel > 80;
+  const isLineDrive = launchDeg > 2 && launchDeg <= 22 && adjustedExitVel > 55;
   const isGroundBall = launchDeg <= 2;
 
   return {
-    totalQuality, exitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
+    totalQuality, exitVel: adjustedExitVel, launchAngle: launchDeg, sprayAngle: sprayDeg,
     along, carry, hangTime, landingX, landingY,
     fair, foul: !fair, isHR,
     isFlyBall, isLineDrive, isGroundBall, isPopup,
